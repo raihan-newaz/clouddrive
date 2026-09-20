@@ -1,0 +1,13 @@
+node_modules/
+.git/
+.gitignore
+.env
+data/cache/
+data/temp/
+data/tmp/
+data/thumbnails/
+data/*.db
+data/*.txt
+scratch/
+npm-debug.log
+*.log

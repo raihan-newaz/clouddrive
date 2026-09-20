@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment and sensitive configuration
+.env
+.env.local
+.env.production
+.env.development
+data/config.env
+*.env
+
+# SQLite database, persistent sessions and caches
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/*.txt
+data/session.txt
+data/telegram_session.txt
+data/cache/
+data/temp/
+data/tmp/
+data/thumbnails/
+
+# Decryption and scratch directories
+scratch/
+emergency_manifest.json
+
+# Operating System and IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

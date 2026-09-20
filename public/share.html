@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate">
+  <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+  <meta name="bingbot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+  <title>CloudDrive — Shared File</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <!-- PWA Manifest & App Icons -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#1e293b" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CloudDrive">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Google+Sans+Text:ital,wght@0,400;0,500;0,700;1,400&family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #131314;
+      --card-bg: #1e1f20;
+      --card-border: #333538;
+      --text: #e3e3e3;
+      --text-muted: #c4c7c5;
+      --primary: #1a73e8;
+      --primary-hover: #1557b0;
+      --danger: #ea4335;
+      --success: #34a853;
+      --surface: #282a2c;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f8fafd;
+        --card-bg: #ffffff;
+        --card-border: #e0e2e7;
+        --text: #1f1f1f;
+        --text-muted: #444746;
+        --primary: #1a73e8;
+        --primary-hover: #1557b0;
+        --surface: #f1f3f4;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Google Sans Text', 'Roboto', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 24px 16px;
+    }
+
+    h1, h2, h3, .brand-logo, .file-title, .btn {
+      font-family: 'Google Sans', sans-serif;
+      font-weight: 500;
+    }
+
+    .share-header {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 20px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--text);
+      font-weight: 700;
+      font-size: 1.25rem;
+    }
+
+    .brand-logo svg {
+      width: 28px;
+      height: 28px;
+      color: var(--primary);
+    }
+
+    .share-container {
+      width: 100%;
+      max-width: 900px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top File Banner */
+    .file-banner {
+      padding: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--card-border);
+      flex-wrap: wrap;
+    }
+
+    .file-meta-main {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .file-icon-box {
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+      background: rgba(59, 130, 246, 0.12);
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .file-icon-box svg {
+      width: 28px;
+      height: 28px;
+    }
+
+    .file-details {
+      min-width: 0;
+    }
+
+    .file-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 500px;
+      margin-bottom: 4px;
+    }
+
+    .file-submeta {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .file-submeta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .file-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: rgba(148, 163, 184, 0.15);
+      color: var(--text);
+      border: 1px solid var(--card-border);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(148, 163, 184, 0.25);
+    }
+
+    /* Content & Preview Area */
+    .preview-body {
+      min-height: 380px;
+      max-height: 650px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000000;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .preview-media-video,
+    .preview-media-audio {
+      width: 100%;
+      max-height: 580px;
+      outline: none;
+    }
+
+    .preview-media-audio {
+      max-width: 500px;
+      margin: 40px auto;
+    }
+
+    .preview-media-img {
+      max-width: 100%;
+      max-height: 580px;
+      object-fit: contain;
+      user-select: none;
+    }
+
+    .preview-media-pdf {
+      width: 100%;
+      height: 580px;
+      border: none;
+    }
+
+    .preview-generic-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 24px;
+      text-align: center;
+      color: var(--text-muted);
+      gap: 16px;
+      background: var(--card-bg);
+      width: 100%;
+    }
+
+    .preview-generic-box svg {
+      width: 64px;
+      height: 64px;
+      color: var(--primary);
+      opacity: 0.8;
+    }
+
+    /* Loading Spinner */
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3px solid rgba(148, 163, 184, 0.2);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Password Card */
+    .auth-card {
+      max-width: 420px;
+      width: 100%;
+      margin: 60px auto;
+      padding: 32px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      text-align: center;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+
+    .auth-card-icon {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+    }
+
+    .auth-card h2 {
+      font-size: 1.25rem;
+      margin-bottom: 8px;
+    }
+
+    .auth-card p {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-bottom: 20px;
+    }
+
+    .auth-input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .auth-input {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .auth-input:focus {
+      border-color: var(--primary);
+    }
+
+    .auth-error {
+      color: var(--danger);
+      font-size: 0.85rem;
+      display: none;
+      margin-top: 4px;
+    }
+
+    /* Error View */
+    .error-card {
+      max-width: 460px;
+      width: 100%;
+      margin: 80px auto;
+      padding: 40px 24px;
+      text-align: center;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+    }
+
+    .error-card-icon {
+      font-size: 3rem;
+      margin-bottom: 16px;
+    }
+
+    .error-card h2 {
+      font-size: 1.35rem;
+      margin-bottom: 8px;
+    }
+
+    .error-card p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    /* Footer */
+    .share-footer {
+      margin-top: 32px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .share-footer a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    .share-footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* Toast Notification */
+    .share-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #1e293b;
+      color: #ffffff;
+      border: 1px solid #475569;
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-size: 0.9rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: transform 0.25s ease-out;
+      z-index: 9999;
+      pointer-events: none;
+    }
+
+    .share-toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Mobile Responsive Optimizations */
+    @media (max-width: 640px) {
+      body {
+        padding: 16px 12px;
+      }
+      .share-header {
+        margin-bottom: 16px;
+        padding-bottom: 14px;
+      }
+      .file-banner {
+        padding: 16px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+      }
+      .file-actions {
+        width: 100%;
+        display: flex;
+        gap: 8px;
+      }
+      .file-actions .btn {
+        flex: 1;
+        font-size: 13px;
+        padding: 10px 12px;
+        justify-content: center;
+      }
+      .preview-body {
+        min-height: 250px;
+        max-height: 460px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="share-header">
+    <a href="/" class="brand-logo">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+      </svg>
+      <span>CloudDrive</span>
+    </a>
+    <span style="font-size: 0.85rem; color: var(--text-muted);">Secure Cloud Storage</span>
+  </header>
+
+  <!-- LOADING STATE -->
+  <div id="state-loading" style="display: flex; flex-direction: column; align-items: center; margin: 100px auto; gap: 16px;">
+    <div class="spinner"></div>
+    <span style="color: var(--text-muted); font-size: 0.95rem;">Loading shared file...</span>
+  </div>
+
+  <!-- PASSWORD REQUIRED STATE -->
+  <div id="state-password" style="display: none; width: 100%;">
+    <div class="auth-card">
+      <div class="auth-card-icon">
+        <svg viewBox="0 0 24 24" width="40" height="40" fill="var(--accent-color)"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+      </div>
+      <h2>Password Protected</h2>
+      <p>This file is protected by the owner. Please enter the password to access.</p>
+      <form id="pw-form" onsubmit="return handlePasswordSubmit(event)">
+        <div class="auth-input-group">
+          <input type="password" id="pw-input" class="auth-input" placeholder="Enter password..." required autofocus>
+          <div class="auth-error" id="pw-error">Incorrect password. Please try again.</div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;" id="pw-submit-btn">Unlock File</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ERROR / EXPIRED STATE -->
+  <div id="state-error" style="display: none; width: 100%;">
+    <div class="error-card">
+      <div class="error-card-icon">
+        <svg viewBox="0 0 24 24" width="40" height="40" fill="#ea4335"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+      </div>
+      <h2 id="error-title">Link Not Available</h2>
+      <p id="error-desc">This file share link has expired, was revoked by the owner, or does not exist.</p>
+      <div style="margin-top: 24px;">
+        <a href="/" class="btn btn-secondary">Go to CloudDrive</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUCCESS / ACTIVE SHARE CONTAINER -->
+  <main id="state-active" class="share-container" style="display: none;">
+    <div class="file-banner">
+      <div class="file-meta-main">
+        <div class="file-icon-box" id="file-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+        </div>
+        <div class="file-details">
+          <h1 class="file-title" id="file-title">filename.ext</h1>
+          <div class="file-submeta">
+            <span id="file-size">0 MB</span>
+            <span>•</span>
+            <span id="file-date">Date</span>
+            <span>•</span>
+            <span id="file-views">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>0 views
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="file-actions">
+        <button class="btn btn-secondary" id="btn-copy-link" title="Copy public link">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+          <span>Copy Link</span>
+        </button>
+        <a class="btn btn-primary" id="btn-download" href="#" download>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+          <span>Download</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- PREVIEW AREA -->
+    <div class="preview-body" id="preview-body">
+      <!-- Media dynamically injected here -->
+    </div>
+  </main>
+
+  <footer class="share-footer">
+    <span>Stored on Discord Cloud via CloudDrive • Fast & Encrypted</span>
+  </footer>
+
+  <div class="share-toast" id="share-toast">Link copied to clipboard!</div>
+
+  <script>
+    // ── Extract Token from URL ──
+    function getToken() {
+      const pathSegments = window.location.pathname.split('/').filter(Boolean);
+      if (pathSegments.length >= 2 && pathSegments[0] === 'share') {
+        return pathSegments[1];
+      }
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('token') || '';
+    }
+
+    const token = getToken();
+    let currentFile = null;
+    let verifiedAccessKey = sessionStorage.getItem('share_key_' + token) || '';
+
+    function showToast(msg) {
+      const toast = document.getElementById('share-toast');
+      if (toast) {
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2500);
+      }
+    }
+
+    function formatFileSize(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr);
+      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    async function loadShare() {
+      if (!token) {
+        showError('Invalid Link', 'No share token provided in the URL.');
+        return;
+      }
+
+      try {
+        const headers = {};
+        if (verifiedAccessKey) {
+          headers['x-share-key'] = verifiedAccessKey;
+        }
+
+        const res = await fetch(`/api/share/public/${encodeURIComponent(token)}`, { headers });
+        if (res.status === 404 || res.status === 410) {
+          const errData = await res.json().catch(() => ({}));
+          showError('Link Expired or Revoked', errData.error || 'This link is no longer available.');
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error(`Server returned status ${res.status}`);
+        }
+
+        const data = await res.json();
+        const fileObj = data.file || data;
+
+        if ((data.requiresPassword || data.hasPassword || fileObj.hasPassword) && !verifiedAccessKey) {
+          showPasswordPrompt();
+          return;
+        }
+
+        renderActiveShare(fileObj, verifiedAccessKey);
+      } catch (err) {
+        console.error('Share load error:', err);
+        showError('Unable to Load File', err.message || 'Check your internet connection.');
+      }
+    }
+
+    function showError(title, desc) {
+      document.getElementById('state-loading').style.display = 'none';
+      document.getElementById('state-password').style.display = 'none';
+      document.getElementById('state-active').style.display = 'none';
+      document.getElementById('state-error').style.display = 'block';
+
+      if (title) document.getElementById('error-title').textContent = title;
+      if (desc) document.getElementById('error-desc').textContent = desc;
+    }
+
+    function showPasswordPrompt() {
+      document.getElementById('state-loading').style.display = 'none';
+      document.getElementById('state-error').style.display = 'none';
+      document.getElementById('state-active').style.display = 'none';
+      document.getElementById('state-password').style.display = 'block';
+      const pwInput = document.getElementById('pw-input');
+      if (pwInput) {
+        pwInput.value = '';
+        pwInput.focus();
+      }
+    }
+
+    async function handlePasswordSubmit(e) {
+      e.preventDefault();
+      const pwInput = document.getElementById('pw-input');
+      const pwError = document.getElementById('pw-error');
+      const submitBtn = document.getElementById('pw-submit-btn');
+      const pw = pwInput.value;
+
+      if (!pw && pw !== '') return false;
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Verifying...';
+      pwError.style.display = 'none';
+
+      try {
+        const res = await fetch(`/api/share/public/${encodeURIComponent(token)}/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          pwError.textContent = errData.error || 'Incorrect password.';
+          pwError.style.display = 'block';
+          pwInput.select();
+          return false;
+        }
+
+        const data = await res.json();
+        const accessKey = data.accessKey || '';
+        if (accessKey) {
+          verifiedAccessKey = accessKey;
+          try {
+            sessionStorage.setItem('share_key_' + token, accessKey);
+          } catch (e) {}
+        }
+        const fileObj = data.file || data;
+        renderActiveShare(fileObj, accessKey);
+      } catch (err) {
+        pwError.textContent = 'Failed to verify password: ' + (err.message || 'Unknown error');
+        pwError.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Unlock File';
+      }
+
+      return false;
+    }
+
+    function renderActiveShare(data, accessKey) {
+      currentFile = data;
+      document.title = `${data.name || 'Shared File'} — CloudDrive`;
+
+      document.getElementById('state-loading').style.display = 'none';
+      document.getElementById('state-password').style.display = 'none';
+      document.getElementById('state-error').style.display = 'none';
+      document.getElementById('state-active').style.display = 'flex';
+
+      document.getElementById('file-title').textContent = data.name || 'Shared File';
+      document.getElementById('file-size').textContent = formatFileSize(data.size || 0);
+      const fileDateEl = document.getElementById('file-date');
+      if (fileDateEl) {
+        fileDateEl.textContent = data.created_at ? formatDate(data.created_at) : (data.expiresAt ? 'Expires ' + formatDate(data.expiresAt) : 'Shared');
+      }
+      document.getElementById('file-views').innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>${(data.views || 1).toLocaleString()} views`;
+
+      // Build Stream & Download URLs
+      const keyParam = accessKey ? `?key=${encodeURIComponent(accessKey)}` : '';
+      const streamUrl = `/api/share/public/${encodeURIComponent(token)}/stream${keyParam}`;
+      const downloadUrl = `/api/share/public/${encodeURIComponent(token)}/download${keyParam}`;
+
+      const downloadBtn = document.getElementById('btn-download');
+      downloadBtn.href = downloadUrl;
+
+      const copyBtn = document.getElementById('btn-copy-link');
+      copyBtn.onclick = () => {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(window.location.href)
+            .then(() => showToast('Link copied to clipboard!'))
+            .catch(() => fallbackCopy(window.location.href));
+        } else {
+          fallbackCopy(window.location.href);
+        }
+      };
+
+      function fallbackCopy(text) {
+        const input = document.createElement('input');
+        input.value = text;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        input.remove();
+        showToast('Link copied to clipboard!');
+      }
+
+      // Render Media Preview
+      const previewBody = document.getElementById('preview-body');
+      previewBody.innerHTML = '';
+
+      const mime = (data.mime_type || '').toLowerCase();
+      const ext = (data.name || '').split('.').pop().toLowerCase();
+      const isCodeOrText = mime.startsWith('text/') || 
+        ['json', 'js', 'ts', 'html', 'css', 'py', 'md', 'xml', 'yaml', 'yml', 'sql', 'sh', 'csv', 'env', 'log', 'txt'].includes(ext);
+
+      if (mime.startsWith('video/') || ['mp4', 'mkv', 'webm', 'mov', 'avi', 'flv', 'wmv'].includes(ext)) {
+        const video = document.createElement('video');
+        video.className = 'preview-media-video';
+        video.controls = true;
+        video.playsInline = true;
+        video.preload = 'metadata';
+        video.src = streamUrl;
+        previewBody.appendChild(video);
+      } else if (mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'opus'].includes(ext)) {
+        previewBody.style.background = 'var(--card-bg)';
+        const audioWrap = document.createElement('div');
+        audioWrap.style.textAlign = 'center';
+        audioWrap.style.padding = '40px 20px';
+
+        const audio = document.createElement('audio');
+        audio.className = 'preview-media-audio';
+        audio.controls = true;
+        audio.src = streamUrl;
+
+        audioWrap.appendChild(audio);
+        previewBody.appendChild(audioWrap);
+      } else if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext)) {
+        const img = document.createElement('img');
+        img.className = 'preview-media-img';
+        img.src = streamUrl;
+        img.alt = data.name;
+        previewBody.appendChild(img);
+      } else if (mime === 'application/pdf' || ext === 'pdf') {
+        previewBody.style.display = 'flex';
+        previewBody.style.flexDirection = 'column';
+        previewBody.innerHTML = `
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 16px; background:rgba(0,0,0,0.2); border-bottom:1px solid var(--border); font-size:13px;">
+            <span style="font-weight:600; color:var(--text);">${data.name}</span>
+            <a href="${streamUrl}" target="_blank" style="color:var(--primary); text-decoration:none; font-weight:500; display:inline-flex; align-items:center; gap:4px;">
+              <span>Open in Native Viewer</span> &nearr;
+            </a>
+          </div>
+          <iframe src="${streamUrl}#page=1&zoom=100&toolbar=1" class="preview-media-pdf" style="height:620px; width:100%; border:none;"></iframe>
+        `;
+      } else if (isCodeOrText) {
+        previewBody.style.background = 'var(--card-bg)';
+        const codeWrap = document.createElement('div');
+        codeWrap.style.width = '100%';
+        codeWrap.style.maxHeight = '480px';
+        codeWrap.style.overflow = 'auto';
+        codeWrap.style.padding = '20px';
+        codeWrap.style.fontFamily = 'Consolas, Monaco, "Courier New", monospace';
+        codeWrap.style.fontSize = '13px';
+        codeWrap.style.whiteSpace = 'pre-wrap';
+        codeWrap.style.lineHeight = '1.6';
+        codeWrap.style.borderRadius = '12px';
+        codeWrap.textContent = 'Loading file content...';
+        previewBody.appendChild(codeWrap);
+
+        fetch(streamUrl)
+          .then(r => r.text())
+          .then(t => { codeWrap.textContent = t; })
+          .catch(() => { codeWrap.textContent = 'Failed to load text preview. Please use download button.'; });
+      } else {
+        // Generic File Card
+        previewBody.style.background = 'var(--card-bg)';
+        const generic = document.createElement('div');
+        generic.className = 'preview-generic-box';
+        generic.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+          </svg>
+          <div style="font-size: 1.1rem; font-weight: 500; color: var(--text);">No preview available for this file type</div>
+          <div style="font-size: 0.9rem;">Click the download button above to download the file directly to your device.</div>
+        `;
+        previewBody.appendChild(generic);
+      }
+    }
+
+    // Initialize
+    loadShare();
+  </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+{
+  "name": "clouddrive",
+  "version": "1.0.0",
+  "description": "Unified personal cloud drive backed by Discord and Telegram with server-managed AES-256-GCM encryption and automatic dual-backup replication",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "decrypt-backup": "node src/scripts/decrypt-backup.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "discord.js": "^14.27.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
+    "hls.js": "^1.7.3",
+    "input": "^1.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.4.0",
+    "sql.js": "^1.11.0",
+    "telegram": "^2.26.8",
+    "uuid": "^11.1.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7"
+  }
+}
