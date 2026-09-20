@@ -12,7 +12,7 @@ const { authLimiter } = require('../middleware/rateLimiter');
 const router = express.Router();
 
 function generateShareToken(fileId, shareToken) {
-  const secret = config.JWT_SECRET || 'clouddrive_share_secret';
+  const secret = config.JWT_SECRET;
   return crypto.createHmac('sha256', secret).update(`share_access:${fileId}:${shareToken}`).digest('hex');
 }
 

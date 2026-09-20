@@ -6,7 +6,7 @@ const http = require('http');
   const db = require('../db');
   await db.initialize();
   const user = db.get('SELECT * FROM users LIMIT 1');
-  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, tokenVersion: user.token_version || 0 }, config.JWT_SECRET || 'clouddrive_jwt_secret', { expiresIn: '1h' });
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, tokenVersion: user.token_version || 0 }, config.JWT_SECRET, { expiresIn: '1h' });
 
   function postPolicy(isEnc) {
     return new Promise((resolve, reject) => {

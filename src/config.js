@@ -27,16 +27,9 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-const insecureDefaults = new Set([
-  'clouddrive-jwt-super-secret-key-change-in-prod',
-  'clouddrive-master-encryption-key-32b',
-  'clouddrive_default_jwt_secret_key_change_me',
-  'clouddrive_default_encryption_key_32_bytes'
-]);
-
 function secureSecret(name) {
   const supplied = (process.env[name] || '').trim();
-  if (supplied && !insecureDefaults.has(supplied) && supplied.length >= 32) return supplied;
+  if (supplied && supplied.length >= 32 && !/(change|replace|default|super[-_ ]?secret)/i.test(supplied)) return supplied;
   const generated = crypto.randomBytes(48).toString('base64url');
   process.env[name] = generated;
   console.warn(`[Config] ${name} was missing or insecure; generated a strong secret. Complete setup to persist it.`);
