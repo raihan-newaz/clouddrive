@@ -181,7 +181,6 @@ const App = {
         appEl.removeAttribute('inert');
         appEl.removeAttribute('aria-hidden');
         appEl.querySelectorAll('input, button, select, textarea').forEach(el => el.disabled = false);
-        this.updateProfileMenu();
         this.initRealtimeEvents();
       } else {
         appEl.setAttribute('inert', '');
@@ -2438,43 +2437,11 @@ const App = {
     if (themeToggle) {
       themeToggle.onclick = () => {
         this.toggleTheme();
-        this.setProfileMenuOpen(false);
       };
     }
     const loginThemeToggle = document.getElementById('login-theme-toggle');
     if (loginThemeToggle) {
       loginThemeToggle.onclick = () => this.toggleTheme();
-    }
-
-    // Google Drive-style profile menu
-    const profileMenuBtn = document.getElementById('profile-menu-btn');
-    const profileMenu = document.getElementById('profile-menu-dropdown');
-    if (profileMenuBtn && profileMenu) {
-      profileMenuBtn.onclick = (e) => {
-        e.stopPropagation();
-        this.setProfileMenuOpen(profileMenu.hidden);
-      };
-      profileMenu.onclick = (e) => e.stopPropagation();
-      document.addEventListener('click', () => this.setProfileMenuOpen(false));
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') this.setProfileMenuOpen(false);
-      });
-    }
-
-    const profileAccountBtn = document.getElementById('profile-account-btn');
-    if (profileAccountBtn) {
-      profileAccountBtn.onclick = () => {
-        this.setProfileMenuOpen(false);
-        this.openSettings();
-      };
-    }
-
-    const profileLogoutBtn = document.getElementById('profile-logout-btn');
-    if (profileLogoutBtn) {
-      profileLogoutBtn.onclick = () => {
-        this.setProfileMenuOpen(false);
-        document.getElementById('settings-logout-btn')?.click();
-      };
     }
 
     // New Folder button
@@ -3926,7 +3893,6 @@ const App = {
             this.user = res.user;
             const emailDisp = document.getElementById('profile-email-display');
             if (emailDisp) emailDisp.textContent = this.user.email;
-            this.updateProfileMenu();
           }
           UI.showToast('Profile updated successfully!', 'success');
         } catch (err) {
@@ -6324,31 +6290,6 @@ const App = {
         loginThemeToggle.dataset.themeIcon = theme;
       }
     }
-  },
-
-  setProfileMenuOpen(open) {
-    const button = document.getElementById('profile-menu-btn');
-    const menu = document.getElementById('profile-menu-dropdown');
-    if (!button || !menu) return;
-    const shouldOpen = Boolean(open);
-    menu.hidden = !shouldOpen;
-    menu.setAttribute('aria-hidden', String(!shouldOpen));
-    button.setAttribute('aria-expanded', String(shouldOpen));
-  },
-
-  updateProfileMenu() {
-    const user = this.user || {};
-    const email = String(user.email || 'Signed in');
-    const displayName = String(user.name || (email.includes('@') ? email.split('@')[0] : 'User'));
-    const initial = Array.from(displayName.trim() || 'U')[0].toUpperCase();
-    const nameEl = document.getElementById('profile-menu-name');
-    const emailEl = document.getElementById('profile-menu-email');
-    const avatar = document.getElementById('profile-avatar');
-    const avatarLarge = document.getElementById('profile-avatar-large');
-    if (nameEl) nameEl.textContent = displayName;
-    if (emailEl) emailEl.textContent = email;
-    if (avatar) avatar.textContent = initial;
-    if (avatarLarge) avatarLarge.textContent = initial;
   },
 
   toggleTheme() {

@@ -654,6 +654,11 @@ const Preview = {
       if (spinner) spinner.classList.remove('visible');
     });
 
+    video.addEventListener('error', () => {
+      if (spinner) spinner.classList.remove('visible');
+      UI.showToast('Unable to play this video. Please try again or download the file.', 'error');
+    });
+
     video.addEventListener('seeking', () => {
       if (spinner) spinner.classList.add('visible');
     });
@@ -826,7 +831,6 @@ const Preview = {
     if (speedBtn && speedMenu) {
       speedBtn.onclick = (e) => {
         e.stopPropagation();
-        if (qualityMenu) qualityMenu.style.display = 'none';
         speedMenu.style.display = speedMenu.style.display === 'none' ? 'flex' : 'none';
       };
 
