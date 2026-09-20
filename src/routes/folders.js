@@ -18,6 +18,26 @@ function sanitizeFolder(f) {
   };
 }
 
+function requireUnlockedFolder(req, res, folder) {
+  if (!folder || (!folder.is_locked && !folder.password_hash)) return true;
+  const token = req.headers['x-folder-token'] || req.query.folderToken;
+  if (verifyFolderToken(folder.id, req.user.id, token)) return true;
+  res.status(403).json({ error: 'Folder password verification required', isLocked: true });
+  return false;
+}
+
+function isDescendantFolder(candidateParentId, folderId, userId) {
+  let currentId = candidateParentId;
+  let hops = 0;
+  while (currentId && hops++ < 100) {
+    if (String(currentId) === String(folderId)) return true;
+    const current = db.getFolderById(currentId, userId);
+    if (!current) return false;
+    currentId = current.parent_id;
+  }
+  return hops >= 100;
+}
+
 function getBreadcrumbs(folderId, userId, isTrash = false) {
   const breadcrumbs = [];
   let currentId = (folderId && folderId !== 'null' && folderId !== 'undefined' && String(folderId).trim() !== '') ? String(folderId).trim() : null;
@@ -196,6 +216,11 @@ router.post('/', async (req, res) => {
   }
 
   const pass = password || pinPassword;
+  if (parentId && parentId !== 'null' && parentId !== 'root') {
+    const parent = db.getFolderById(parentId, req.user.id);
+    if (!parent) return res.status(404).json({ error: 'Parent folder not found' });
+    if (!requireUnlockedFolder(req, res, parent)) return;
+  }
   let passwordHash = null;
   let isLocked = 0;
   if (pass && pass.trim().length > 0) {
@@ -225,10 +250,16 @@ router.patch('/:id', async (req, res) => {
   const { name, parent_id, parentId, storagePolicy, storage_policy } = req.body;
   const folder = db.getFolderById(id, req.user.id);
   if (!folder) return res.status(404).json({ error: 'Folder not found' });
+  if (!requireUnlockedFolder(req, res, folder)) return;
 
   const targetParent = parent_id !== undefined ? parent_id : parentId;
-  if (targetParent === id) {
+  if (targetParent === id || isDescendantFolder(targetParent, id, req.user.id)) {
     return res.status(400).json({ error: 'Cannot move folder into itself' });
+  }
+  if (targetParent && targetParent !== 'null' && targetParent !== 'root') {
+    const parent = db.getFolderById(targetParent, req.user.id);
+    if (!parent) return res.status(404).json({ error: 'Parent folder not found' });
+    if (!requireUnlockedFolder(req, res, parent)) return;
   }
 
   const updates = {};
@@ -248,10 +279,16 @@ router.put('/:id', (req, res) => {
 
   const folder = db.getFolderById(id, req.user.id);
   if (!folder) return res.status(404).json({ error: 'Folder not found' });
+  if (!requireUnlockedFolder(req, res, folder)) return;
 
   const targetParent = parentId !== undefined ? parentId : parent_id;
-  if (targetParent === id) {
+  if (targetParent === id || isDescendantFolder(targetParent, id, req.user.id)) {
     return res.status(400).json({ error: 'Cannot move folder into itself' });
+  }
+  if (targetParent && targetParent !== 'null' && targetParent !== 'root') {
+    const parent = db.getFolderById(targetParent, req.user.id);
+    if (!parent) return res.status(404).json({ error: 'Parent folder not found' });
+    if (!requireUnlockedFolder(req, res, parent)) return;
   }
 
   const updates = {};
@@ -273,6 +310,7 @@ router.post('/:id/lock', async (req, res) => {
 
   const folder = db.getFolderById(id, req.user.id);
   if (!folder) return res.status(404).json({ error: 'Folder not found' });
+  if (folder.password_hash && !requireUnlockedFolder(req, res, folder)) return;
 
   const passwordHash = await bcrypt.hash(pass.trim(), 10);
   const updated = db.updateFolder(id, {
@@ -352,6 +390,7 @@ router.delete('/:id', async (req, res) => {
   const { id } = req.params;
   const folder = db.getFolderById(id, req.user.id);
   if (!folder) return res.status(404).json({ error: 'Folder not found' });
+  if (!requireUnlockedFolder(req, res, folder)) return;
 
   const isPermanent = req.query.permanent === 'true';
   const result = isPermanent ?

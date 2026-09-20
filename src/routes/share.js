@@ -8,8 +8,19 @@ const cacheManager = require('../services/cacheManager');
 const cryptoModule = require('../crypto');
 const authMiddleware = require('../middleware/auth');
 const { authLimiter } = require('../middleware/rateLimiter');
+const { shareLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
+router.use('/public', shareLimiter);
+
+function denyBlockedIp(req, res) {
+  if (db.isIpBlocked && db.isIpBlocked(req.ip)) {
+    db.logAuditEvent({ action: 'SHARE_BLOCKED_IP', ipAddress: req.ip, userAgent: req.get('User-Agent'), details: { path: req.path } });
+    res.status(403).json({ error: 'Access denied from this IP address' });
+    return true;
+  }
+  return false;
+}
 
 function generateShareToken(fileId, shareToken) {
   const secret = config.JWT_SECRET;
@@ -221,6 +232,7 @@ router.delete('/file/:fileId', authMiddleware, (req, res) => {
 
 // Public Share Info (Unauthenticated)
 router.get('/public/:token', async (req, res) => {
+  if (denyBlockedIp(req, res)) return;
   const { token } = req.params;
   const file = db.get('SELECT * FROM files WHERE share_token = ? AND is_shared = 1', [token]);
   if (!file) return res.status(404).json({ error: 'Share link not found or revoked' });
@@ -231,6 +243,11 @@ router.get('/public/:token', async (req, res) => {
 
   // Increment view count
   db.run('UPDATE files SET share_views = share_views + 1 WHERE id = ?', [file.id]);
+  db.logAuditEvent({
+    userId: file.user_id, action: 'SHARE_VIEW',
+    details: { fileId: file.id, fileName: file.name, token: token.slice(0, 8) },
+    ipAddress: req.ip, userAgent: req.get('User-Agent')
+  });
 
   const hasPassword = Boolean(file.share_password);
   const requiresPassword = hasPassword && !verifyShareAccess(file, token, req);
@@ -256,6 +273,7 @@ router.get('/public/:token', async (req, res) => {
 
 // Verify Password for Public Share Link
 router.post('/public/:token/verify', authLimiter, async (req, res) => {
+  if (denyBlockedIp(req, res)) return;
   const { token } = req.params;
   const { password } = req.body;
 
@@ -297,6 +315,7 @@ router.post('/public/:token/verify', authLimiter, async (req, res) => {
 
 // Public Streaming / Preview
 router.get('/public/:token/stream', async (req, res) => {
+  if (denyBlockedIp(req, res)) return;
   const { token } = req.params;
   const file = db.get('SELECT * FROM files WHERE share_token = ? AND is_shared = 1', [token]);
   if (!file) return res.status(404).send('File not found or share link revoked');
@@ -308,6 +327,7 @@ router.get('/public/:token/stream', async (req, res) => {
   if (file.share_password && !verifyShareAccess(file, token, req)) {
     return res.status(401).send('Password required to stream shared file');
   }
+  db.logAuditEvent({ userId: file.user_id, action: 'SHARE_FILE_VIEW', details: { fileId: file.id, fileName: file.name, token: token.slice(0, 8), access: 'stream' }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
 
   const isDiscordEnabled = db.getSetting('discord_enabled') !== 'false';
   const isTelegramEnabled = db.getSetting('telegram_enabled') !== 'false';
@@ -384,6 +404,7 @@ router.get('/public/:token/stream', async (req, res) => {
 
 // Helper for Public Download
 async function handlePublicDownload(req, res) {
+  if (denyBlockedIp(req, res)) return;
   const { token } = req.params;
   const password = req.body?.password;
 
@@ -404,6 +425,8 @@ async function handlePublicDownload(req, res) {
       return res.status(401).json({ error: 'Incorrect share password' });
     }
   }
+
+  db.logAuditEvent({ userId: file.user_id, action: 'SHARE_FILE_DOWNLOAD', details: { fileId: file.id, fileName: file.name, token: token.slice(0, 8) }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
 
   const owner = db.getUserById(file.user_id);
   const userKey = owner ? owner.encryption_key : config.ENCRYPTION_KEY;
@@ -449,6 +472,11 @@ async function handlePublicDownload(req, res) {
     }
 
     db.run('UPDATE files SET share_downloads = share_downloads + 1 WHERE id = ?', [file.id]);
+    db.logAuditEvent({
+      userId: file.user_id, action: 'SHARE_DOWNLOAD',
+      details: { fileId: file.id, fileName: file.name, token: token.slice(0, 8) },
+      ipAddress: req.ip, userAgent: req.get('User-Agent')
+    });
     res.end();
   } catch (err) {
     console.error('[Share] Public download failed:', err.message);

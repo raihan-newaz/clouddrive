@@ -1324,6 +1324,32 @@
 
 /* Mobile Frosted Glass Navigation & FAB (<= 767px) */
 @media (max-width: 767px) {
+  .upload-status-widget {
+    left: 10px;
+    right: 10px;
+    bottom: calc(var(--bottom-nav-height, 60px) + 12px + env(safe-area-inset-bottom, 0px));
+    width: auto;
+    max-width: none;
+    border-radius: 14px;
+  }
+
+  .upload-status-widget.minimized {
+    width: auto;
+  }
+
+  .upload-widget-list {
+    max-height: min(45vh, 360px);
+    padding: 8px 10px;
+  }
+
+  .upload-widget-item {
+    padding: 9px 10px;
+  }
+
+  .upload-widget-item-meta {
+    gap: 8px;
+  }
+
   .bottom-nav {
     display: flex !important;
     background: var(--bg-glass) !important;

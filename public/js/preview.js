@@ -607,6 +607,32 @@ const Preview = {
       }
     };
 
+    const enterPlayerFullscreen = async () => {
+      // iPhone Safari exposes fullscreen on the video element, not arbitrary divs.
+      if (typeof video.webkitEnterFullscreen === 'function') {
+        try {
+          video.webkitEnterFullscreen();
+          return true;
+        } catch (e) {}
+      }
+      if (playerWrap?.requestFullscreen) {
+        try {
+          await playerWrap.requestFullscreen();
+          if (screen.orientation?.lock) {
+            try { await screen.orientation.lock('landscape'); } catch (e) {}
+          }
+          return true;
+        } catch (e) {}
+      }
+      return false;
+    };
+
+    const exitPlayerFullscreen = async () => {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        try { await document.exitFullscreen(); } catch (e) {}
+      }
+    };
+
     // Video Event Handlers for UI Sync
     video.addEventListener('play', () => {
       if (playIcon) playIcon.innerHTML = ICONS.pause;
@@ -713,11 +739,8 @@ const Preview = {
           showSeekRipple(seekRightEl);
         } else {
           // Center zone → toggle fullscreen
-          if (!document.fullscreenElement) {
-            if (playerWrap) playerWrap.requestFullscreen().catch(() => {});
-          } else {
-            document.exitFullscreen().catch(() => {});
-          }
+          if (!document.fullscreenElement) enterPlayerFullscreen();
+          else exitPlayerFullscreen();
         }
       }
     };
@@ -871,11 +894,8 @@ const Preview = {
     if (fullscreenBtn && playerWrap) {
       fullscreenBtn.onclick = (e) => {
         e.stopPropagation();
-        if (!document.fullscreenElement) {
-          playerWrap.requestFullscreen().catch(() => {});
-        } else {
-          document.exitFullscreen().catch(() => {});
-        }
+        if (!document.fullscreenElement) enterPlayerFullscreen();
+        else exitPlayerFullscreen();
       };
     }
 

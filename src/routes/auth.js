@@ -8,6 +8,7 @@ const config = require('../config');
 const { authLimiter } = require('../middleware/rateLimiter');
 const authMiddleware = require('../middleware/auth');
 const sessionTracker = require('../services/sessionTracker');
+const { notifySecurityEvent } = require('../services/notificationService');
 
 const router = express.Router();
 
@@ -27,6 +28,11 @@ router.post('/register', authLimiter, async (req, res) => {
 // Login
 router.post('/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
+  if (db.isIpBlocked && db.isIpBlocked(req.ip)) {
+    db.logAuditEvent({ userEmail: email ? String(email).toLowerCase().trim() : null, action: 'LOGIN_BLOCKED_IP', ipAddress: req.ip, userAgent: req.get('User-Agent') });
+    notifySecurityEvent('Suspicious login blocked', { email, ip: req.ip, reason: 'IP is blocked' });
+    return res.status(403).json({ error: 'Access denied from this IP address' });
+  }
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
@@ -82,15 +88,20 @@ router.post('/login', authLimiter, async (req, res) => {
     });
 
     if (lockInfo && lockInfo.isLocked) {
+      notifySecurityEvent('Account locked after failed logins', { email: user.email, ip: req.ip, attempts: lockInfo.attempts });
       return res.status(403).json({ error: 'Account has been temporarily locked for 15 minutes due to 5 consecutive failed login attempts.' });
     }
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
   // Login Succeeded - Reset lockout counters
+  if (db.getSetting('maintenance_mode') === 'true' && user.role !== 'admin') {
+    db.logAuditEvent({ userId: user.id, userEmail: user.email, action: 'LOGIN_BLOCKED_MAINTENANCE', ipAddress: req.ip, userAgent: req.get('User-Agent') });
+    return res.status(503).json({ error: 'The service is currently in maintenance mode.' });
+  }
   db.resetFailedLogins(user.id);
   db.updateUser(user.id, { last_login_at: new Date().toISOString() });
-  sessionTracker.track(user.id, req);
+  const sessionId = sessionTracker.createBrowserSession(user, req);
 
   db.logAuditEvent({
     userId: user.id,
@@ -101,7 +112,7 @@ router.post('/login', authLimiter, async (req, res) => {
   });
 
   const token = jwt.sign(
-    { id: user.id, email: user.email, role: user.role, tokenVersion: user.token_version || 1 },
+    { id: user.id, email: user.email, role: user.role, tokenVersion: user.token_version || 1, sid: sessionId },
     config.JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -238,8 +249,18 @@ router.get('/me', authMiddleware, (req, res) => {
 router.put('/profile', authMiddleware, async (req, res) => {
   const { name, email, filePrefix, file_prefix, default_storage_mode, defaultStorageMode } = req.body;
   const updates = {};
-  if (name) updates.name = name.trim();
-  if (email) updates.email = email.toLowerCase().trim();
+  if (name !== undefined) {
+    const cleanName = String(name).trim();
+    if (cleanName.length < 2 || cleanName.length > 100) return res.status(400).json({ error: 'Name must be between 2 and 100 characters' });
+    updates.name = cleanName;
+  }
+  if (email !== undefined) {
+    const cleanEmail = String(email).toLowerCase().trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || cleanEmail.length > 254) return res.status(400).json({ error: 'Valid email address is required' });
+    const existing = db.getUserByEmail(cleanEmail);
+    if (existing && existing.id !== req.user.id) return res.status(409).json({ error: 'This email address is already in use' });
+    updates.email = cleanEmail;
+  }
   const prefix = filePrefix !== undefined ? filePrefix : file_prefix;
   if (prefix !== undefined) {
     updates.file_prefix = prefix ? prefix.trim() : null;
@@ -247,6 +268,7 @@ router.put('/profile', authMiddleware, async (req, res) => {
   }
   const storageMode = default_storage_mode !== undefined ? default_storage_mode : defaultStorageMode;
   if (storageMode !== undefined) {
+    if (!['discord', 'telegram', 'dual'].includes(storageMode)) return res.status(400).json({ error: 'Invalid storage mode' });
     updates.default_storage_mode = storageMode;
     db.setSetting('default_storage_mode', storageMode, req.user.id);
   }

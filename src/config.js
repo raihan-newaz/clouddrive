@@ -64,6 +64,13 @@ module.exports = {
   DISCORD_CHUNK_SIZE_MB: parseFloat(process.env.DISCORD_CHUNK_SIZE_MB || process.env.CHUNK_SIZE_MB || '9.5'),
   TELEGRAM_CHUNK_SIZE_MB: parseFloat(process.env.TELEGRAM_CHUNK_SIZE_MB || '20'),
   MAX_CONCURRENT_UPLOADS: parseInt(process.env.MAX_CONCURRENT_UPLOADS || '3', 10),
+  // Whole chunk jobs are capped server-side. Keep this conservative on a VPS:
+  // each job holds buffers and performs AES-GCM/SHA-256 work before cloud I/O.
+  // Balanced defaults for a 6 vCPU / 16 GB VPS. Provider uploads are mostly
+  // network-bound; leave headroom for the app, WebDAV, and replication worker.
+  MAX_ACTIVE_UPLOAD_JOBS: parseInt(process.env.MAX_ACTIVE_UPLOAD_JOBS || '3', 10),
+  MAX_UPLOAD_JOBS_PER_USER: parseInt(process.env.MAX_UPLOAD_JOBS_PER_USER || '2', 10),
+  MAX_QUEUED_UPLOAD_JOBS: parseInt(process.env.MAX_QUEUED_UPLOAD_JOBS || '24', 10),
   MAX_REPLICATION_WORKERS: parseInt(process.env.MAX_REPLICATION_WORKERS || '2', 10),
   
   // WebDAV

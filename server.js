@@ -8,6 +8,8 @@ const storageManager = require('./src/storage/StorageManager');
 const replicationWorker = require('./src/services/replicationWorker');
 const { startAutomatedBackups } = require('./src/services/backup');
 const securityMiddleware = require('./src/middleware/security');
+const { apiLimiter } = require('./src/middleware/rateLimiter');
+const maintenanceMode = require('./src/middleware/maintenance');
 
 // Routes
 const authRoutes = require('./src/routes/auth');
@@ -23,7 +25,14 @@ const remoteUploadRoutes = require('./src/routes/remoteUpload');
 const webdavRoutes = require('./src/routes/webdav');
 
 const app = express();
-app.set('trust proxy', process.env.TRUST_PROXY || 'loopback');
+// CyberPanel/Nginx commonly forwards the real client address. Set TRUST_PROXY
+// to `true` (or a hop count) in production so req.ip is the actual client IP.
+const trustProxy = process.env.TRUST_PROXY === 'true'
+  ? true
+  : (process.env.TRUST_PROXY && /^\d+$/.test(process.env.TRUST_PROXY)
+    ? Number(process.env.TRUST_PROXY)
+    : (process.env.TRUST_PROXY || 'loopback'));
+app.set('trust proxy', trustProxy);
 
 // Security and Parsers
 app.use(securityMiddleware());
@@ -57,6 +66,10 @@ app.use('/webdav', webdavRoutes);
 // JSON and URL-Encoded Parsers
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use(maintenanceMode);
+// Protect every JSON API endpoint from unauthenticated request floods. More
+// restrictive limiters still apply to authentication, uploads, and WebDAV.
+app.use('/api', apiLimiter);
 
 // Static Assets
 app.use(express.static(path.join(__dirname, 'public'), {

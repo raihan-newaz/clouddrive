@@ -92,6 +92,8 @@ const App = {
       try {
         const authRes = await API.verifyAuth();
         this.user = authRes?.user || null;
+        const adminLink = document.getElementById('sidebar-admin-center-link');
+        if (adminLink) adminLink.style.display = this.user?.role === 'admin' ? 'flex' : 'none';
         if (authRes?.preferences) {
           this.applyPreferences(authRes.preferences);
         }
@@ -212,6 +214,9 @@ const App = {
     if (pathname === '/settings' || urlParams.get('view') === 'settings' || hash === '#view=settings' || hash === '#settings') {
       return { view: 'settings', folderId: null };
     }
+    if (pathname === '/admin-center' || urlParams.get('view') === 'admin-center' || hash === '#admin-center') {
+      return { view: 'admin-center', folderId: null };
+    }
     if (pathname === '/storage' || urlParams.get('view') === 'storage' || hash === '#view=storage' || hash === '#storage') {
       return { view: 'storage', folderId: null };
     }
@@ -278,6 +283,10 @@ const App = {
 
   async navigateToView(view, updateUrl = true) {
     this.currentView = view;
+    if (view !== 'admin-center') {
+      document.querySelectorAll('.content > *').forEach(el => { if (el.id !== 'admin-center-page') el.style.display = ''; });
+      const adminPage = document.getElementById('admin-center-page'); if (adminPage) adminPage.style.display = 'none';
+    }
     UI.clearSelection();
     this.updateSidebarActive(view);
 
@@ -314,7 +323,165 @@ const App = {
       case 'settings':
         this.openSettings();
         break;
+      case 'admin-center':
+        if (this.user?.role !== 'admin') return this.navigateToView('drive');
+        await this.showAdminCenterPage();
+        break;
     }
+  },
+
+  async openAdminControl(tab = 'account') {
+    if (this.user?.role !== 'admin') {
+      UI.showToast('Administrator privileges required', 'warning');
+      return;
+    }
+    const paneId = `pane-${tab}`;
+    if (document.getElementById('admin-settings-host')) {
+      await this.navigateToView('admin-center');
+      document.getElementById(paneId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    await this.openSettings();
+    document.querySelector(`.settings-tab-btn[data-tab="${tab}"]`)?.click();
+  },
+
+  mountAdminSettings() {
+    const host = document.getElementById('admin-settings-host');
+    if (!host || this.user?.role !== 'admin') return;
+    const adminPaneIds = ['pane-users', 'pane-security', 'pane-discord', 'pane-telegram', 'pane-backup', 'pane-webdav'];
+    adminPaneIds.forEach(id => {
+      const pane = document.getElementById(id);
+      if (!pane) return;
+      if (pane.parentElement !== host) host.appendChild(pane);
+      pane.style.display = 'flex';
+    });
+    ['tab-users-nav', 'tab-discord-nav', 'tab-telegram-nav'].forEach(id => {
+      const tab = document.getElementById(id);
+      if (tab) tab.style.display = 'none';
+    });
+    ['security', 'backup', 'webdav'].forEach(tabName => {
+      const tab = document.querySelector(`.settings-tab-btn[data-tab="${tabName}"]`);
+      if (tab) tab.style.display = 'none';
+    });
+  },
+
+  async showAdminCenterPage() {
+    document.querySelectorAll('.content > *').forEach(el => { if (el.id !== 'admin-center-page') el.style.display = 'none'; });
+    const page = document.getElementById('admin-center-page'); if (page) page.style.display = 'block';
+    this.mountAdminSettings();
+    const renderAudit = async () => {
+      const auditEl = document.getElementById('admin-center-audit');
+      const totalEl = document.getElementById('admin-audit-total');
+      if (!auditEl) return;
+      const query = new URLSearchParams({ limit: '100' });
+      const filters = { search: 'admin-audit-search', user: 'admin-audit-user', file: 'admin-audit-file', ip: 'admin-audit-ip', action: 'admin-audit-action' };
+      Object.entries(filters).forEach(([key, id]) => {
+        const value = document.getElementById(id)?.value?.trim();
+        if (value) query.set(key, value);
+      });
+      auditEl.innerHTML = '<span class="hint">Loading activity…</span>';
+      try {
+        const data = await API.request('GET', `/api/admin/audit-logs?${query}`);
+        const rows = Array.isArray(data) ? data : (data.logs || data.auditLogs || []);
+        if (totalEl) totalEl.textContent = `${data.total ?? rows.length} events`;
+        auditEl.innerHTML = rows.length ? `<table class="data-table"><thead><tr><th>User</th><th>File / request</th><th>Action</th><th>IP</th><th>Browser / client</th><th>Time</th><th></th></tr></thead><tbody>${rows.map(entry => {
+          let details = {}; try { details = JSON.parse(entry.details || '{}') || {}; } catch (_) { details = { value: entry.details }; }
+          const file = details.fileName || details.fileId || details.path || details.value || '—';
+          const ip = entry.ip_address || '';
+          return `<tr><td>${UI.escapeHtml(entry.user_email || 'Anonymous')}</td><td title="${UI.escapeHtml(String(file))}">${UI.escapeHtml(String(file))}</td><td><span class="admin-action-pill" title="${UI.escapeHtml(entry.action || '')}">${UI.escapeHtml(entry.action || '—')}</span></td><td class="admin-ip-text">${UI.escapeHtml(ip || '—')}</td><td class="admin-table-client" title="${UI.escapeHtml(entry.user_agent || '')}">${UI.escapeHtml(entry.user_agent || '—')}</td><td class="admin-table-time">${UI.escapeHtml(entry.created_at || '')}</td><td>${ip ? `<button class="btn-secondary btn-sm admin-block-event-ip" data-ip="${UI.escapeHtml(ip)}">Block</button>` : ''}</td></tr>`;
+        }).join('')}</tbody></table>` : '<span class="hint">No activity matches these filters.</span>';
+        auditEl.querySelectorAll('.admin-block-event-ip').forEach(button => {
+          button.onclick = () => { const input = document.getElementById('admin-block-ip'); if (input) { input.value = button.dataset.ip; input.focus(); } };
+        });
+      } catch (error) {
+        if (totalEl) totalEl.textContent = 'Unavailable';
+        auditEl.innerHTML = `<span class="hint">Unable to load activity: ${UI.escapeHtml(error.message || 'Request failed')}</span>`;
+      }
+    };
+    const renderBlockedIps = async () => {
+      const list = document.getElementById('admin-blocked-ips');
+      if (!list) return;
+      try {
+        const data = await API.request('GET', '/api/admin/blocked-ips');
+        const ips = data.blockedIps || [];
+        list.innerHTML = ips.length ? ips.map(item => `<div class="admin-blocked-row"><div><strong>${UI.escapeHtml(item.ip_address)}</strong><small>${UI.escapeHtml(item.reason || 'No reason recorded')} · ${UI.escapeHtml(item.created_at || '')}</small></div><button class="btn-secondary btn-sm admin-unblock-ip" data-ip="${UI.escapeHtml(item.ip_address)}">Unblock</button></div>`).join('') : '<span class="hint">No IP addresses are blocked.</span>';
+        list.querySelectorAll('.admin-unblock-ip').forEach(button => button.onclick = async () => {
+          try { await API.request('DELETE', `/api/admin/blocked-ips/${encodeURIComponent(button.dataset.ip)}`); UI.showToast(`${button.dataset.ip} unblocked`, 'success'); await Promise.all([renderBlockedIps(), renderDashboard()]); }
+          catch (error) { UI.showToast(error.message || 'Unable to unblock IP', 'error'); }
+        });
+      } catch (error) { list.innerHTML = `<span class="hint">Unable to load blocked IPs: ${UI.escapeHtml(error.message || 'Request failed')}</span>`; }
+    };
+    const renderDashboard = async () => {
+      try {
+        const data = await API.getAdminStats();
+        const stats = data.stats || data;
+        const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+        setText('admin-stat-users', stats.activeUsers ?? '—');
+        setText('admin-stat-users-detail', `${stats.users ?? 0} total accounts`);
+        setText('admin-stat-files', stats.files ?? '—');
+        setText('admin-stat-storage', UI.formatFileSize(stats.storageUsed || 0));
+        setText('admin-stat-events', stats.securityEvents ?? '—');
+        setText('admin-stat-blocked', stats.blockedIps ?? '—');
+      } catch (_) { ['admin-stat-users', 'admin-stat-files', 'admin-stat-events', 'admin-stat-blocked'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '—'; }); }
+    };
+    const renderOperations = async () => {
+      try {
+        const [maintenance, notificationData, sessionData] = await Promise.all([API.request('GET', '/api/admin/maintenance'), API.request('GET', '/api/admin/notification-settings'), API.request('GET', '/api/admin/sessions')]);
+        const maintenanceToggle = document.getElementById('admin-maintenance-mode'); if (maintenanceToggle) maintenanceToggle.checked = Boolean(maintenance.enabled);
+        const settings = notificationData.settings || {};
+        [['admin-alerts-enabled', 'enabled'], ['admin-alert-telegram', 'telegram'], ['admin-alert-discord', 'discord'], ['admin-alert-email', 'email']].forEach(([id, key]) => { const element = document.getElementById(id); if (element) element.checked = Boolean(settings[key]); });
+        const emailTo = document.getElementById('admin-alert-email-to'); if (emailTo) emailTo.value = settings.emailTo || '';
+        const status = document.getElementById('admin-notification-status'); if (status) status.textContent = `Configured: Telegram ${settings.telegramConfigured ? '✓' : '—'}, Discord ${settings.discordConfigured ? '✓' : '—'}, Email ${settings.emailConfigured ? '✓' : '—'}. SMTP credentials stay server-side.`;
+        const deviceList = document.getElementById('admin-device-sessions'); const sessions = sessionData.sessions || [];
+        if (deviceList) {
+          deviceList.innerHTML = sessions.length ? sessions.map(session => `<div class="admin-blocked-row"><div><strong>${UI.escapeHtml(session.clientName || session.type || 'Device')}${session.isCurrent ? ' (this browser)' : ''}</strong><small>${UI.escapeHtml(session.username || 'Unknown user')} · ${UI.escapeHtml(session.ip || '—')} · ${UI.escapeHtml(session.status || 'idle')}</small></div>${!session.revoked ? `<button class="btn-secondary btn-sm admin-revoke-session" data-session-id="${UI.escapeHtml(session.id)}">Revoke</button>` : ''}</div>`).join('') : '<span class="hint">No active device sessions recorded yet.</span>';
+          deviceList.querySelectorAll('.admin-revoke-session').forEach(button => button.onclick = async () => { try { await API.request('POST', `/api/admin/sessions/${encodeURIComponent(button.dataset.sessionId)}/revoke`); UI.showToast('Device session revoked', 'success'); await renderOperations(); } catch (error) { UI.showToast(error.message || 'Unable to revoke session', 'error'); } });
+        }
+      } catch (error) { const status = document.getElementById('admin-notification-status'); if (status) status.textContent = `Operational controls unavailable: ${error.message || 'request failed'}`; }
+    };
+    const setWorkspace = workspace => {
+      document.querySelectorAll('[data-admin-workspace]').forEach(button => button.classList.toggle('active', button.dataset.adminWorkspace === workspace));
+      document.querySelectorAll('[data-admin-workspace-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.adminWorkspacePanel === workspace));
+      document.getElementById('admin-center-page')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    document.querySelectorAll('[data-admin-workspace]').forEach(button => { button.onclick = () => setWorkspace(button.dataset.adminWorkspace); });
+    document.querySelectorAll('[data-admin-workspace-target]').forEach(button => { button.onclick = () => setWorkspace(button.dataset.adminWorkspaceTarget); });
+    const usersButton = document.getElementById('admin-open-users');
+    const securityButton = document.getElementById('admin-open-security');
+    const settingsButton = document.getElementById('admin-open-settings');
+    if (usersButton) usersButton.onclick = () => { setWorkspace('settings'); document.getElementById('pane-users')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    if (securityButton) securityButton.onclick = () => { setWorkspace('settings'); document.getElementById('pane-security')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    if (settingsButton) settingsButton.onclick = () => { setWorkspace('settings'); document.getElementById('pane-discord')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    document.getElementById('admin-refresh-dashboard')?.addEventListener('click', () => Promise.all([renderDashboard(), renderAudit(), renderBlockedIps(), renderOperations()]));
+    document.getElementById('admin-maintenance-mode')?.addEventListener('change', async event => {
+      try { await API.request('PUT', '/api/admin/maintenance', { enabled: event.target.checked }); UI.showToast(event.target.checked ? 'Maintenance mode enabled' : 'Maintenance mode disabled', 'success'); }
+      catch (error) { event.target.checked = !event.target.checked; UI.showToast(error.message || 'Unable to update maintenance mode', 'error'); }
+    });
+    document.getElementById('admin-notification-form')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      try { await API.request('PUT', '/api/admin/notification-settings', { enabled: document.getElementById('admin-alerts-enabled').checked, telegram: document.getElementById('admin-alert-telegram').checked, discord: document.getElementById('admin-alert-discord').checked, email: document.getElementById('admin-alert-email').checked, emailTo: document.getElementById('admin-alert-email-to').value.trim() }); UI.showToast('Alert settings saved', 'success'); await renderOperations(); }
+      catch (error) { UI.showToast(error.message || 'Unable to save alert settings', 'error'); }
+    });
+    document.getElementById('admin-test-alert')?.addEventListener('click', async () => { try { await API.request('POST', '/api/admin/notification-settings/test'); UI.showToast('Test alert queued', 'success'); } catch (error) { UI.showToast(error.message || 'Unable to queue test alert', 'error'); } });
+    ['admin-audit-search', 'admin-audit-user', 'admin-audit-file', 'admin-audit-ip'].forEach(id => document.getElementById(id)?.addEventListener('input', renderAudit));
+    document.getElementById('admin-audit-action')?.addEventListener('change', renderAudit);
+    const blockForm = document.getElementById('admin-block-ip-form');
+    if (blockForm) blockForm.onsubmit = async event => {
+      event.preventDefault();
+      const ip = document.getElementById('admin-block-ip')?.value.trim();
+      const reason = document.getElementById('admin-block-reason')?.value.trim() || '';
+      if (!ip) return;
+      try {
+        await API.request('POST', '/api/admin/blocked-ips', { ip, reason });
+        UI.showToast(`${ip} blocked`, 'success');
+        blockForm.reset();
+        await Promise.all([renderBlockedIps(), renderDashboard(), renderAudit()]);
+      } catch (error) { UI.showToast(error.message || 'Unable to block IP', 'error'); }
+    };
+    document.querySelectorAll('[data-admin-section]').forEach(button => {
+      button.onclick = () => { setWorkspace('settings'); document.getElementById(button.dataset.adminSection)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    });
+    await Promise.all([renderDashboard(), renderAudit(), renderBlockedIps(), renderOperations(), this.loadAdminUsers(), this.loadSettings(), this.loadBackupStatus(), this.loadWebDavSettings()]);
   },
 
   _storageStatsTimer: null,
@@ -2361,6 +2528,8 @@ const App = {
           const authData = await API.login(email, pwd);
           if (email) localStorage.setItem('discorddrive_last_email', email);
           this.user = authData?.user || null;
+          const adminLink = document.getElementById('sidebar-admin-center-link');
+          if (adminLink) adminLink.style.display = this.user?.role === 'admin' ? 'flex' : 'none';
           if (authData?.preferences) {
             this.applyPreferences(authData.preferences);
           }
@@ -4866,6 +5035,8 @@ const App = {
         const enabled = document.getElementById('webdav-enabled')?.checked;
         const permissionMode = document.getElementById('webdav-permission-mode')?.value || 'full';
         const password = document.getElementById('webdav-password')?.value || '';
+        const username = document.getElementById('webdav-username')?.value.trim() || '';
+        const userEnabled = document.getElementById('webdav-user-enabled')?.checked !== false;
 
         btnSaveWebdav.disabled = true;
         btnSaveWebdav.innerHTML = '<span>Saving...</span>';
@@ -4874,6 +5045,8 @@ const App = {
           // Build payload — only include admin-only fields if user is admin
           const isAdmin = this.user && this.user.role === 'admin';
           const payload = {};
+          payload.username = username;
+          payload.userEnabled = userEnabled;
           if (isAdmin) {
             payload.enabled = enabled;
             payload.permissionMode = permissionMode;
@@ -5105,10 +5278,13 @@ const App = {
   async openSettings() {
     this.initSettings();
     UI.showModal('settings-modal');
+    if (!this.user) {
+      try { const profile = await API.getProfile(); this.user = profile?.user || profile; } catch (_) {}
+    }
 
     // Default to account tab or keep selected
     const activeTabBtn = document.querySelector('.settings-tab-btn.active');
-    const tabName = activeTabBtn ? activeTabBtn.getAttribute('data-tab') : 'account';
+    let tabName = activeTabBtn ? activeTabBtn.getAttribute('data-tab') : 'account';
     document.querySelectorAll('.settings-tab-pane').forEach(p => {
       p.style.display = p.id === `pane-${tabName}` ? 'flex' : 'none';
     });
@@ -5150,14 +5326,31 @@ const App = {
       }
     }
 
-    // Toggle Admin-only Tabs (Users, Discord, Telegram)
+    // Admin-only controls are mounted in Admin Center instead of this modal.
     const isAdmin = this.user?.role === 'admin';
     const tabUsersNav = document.getElementById('tab-users-nav');
     const tabDiscordNav = document.getElementById('tab-discord-nav');
     const tabTelegramNav = document.getElementById('tab-telegram-nav');
-    if (tabUsersNav) tabUsersNav.style.display = isAdmin ? 'inline-flex' : 'none';
-    if (tabDiscordNav) tabDiscordNav.style.display = isAdmin ? 'inline-flex' : 'none';
-    if (tabTelegramNav) tabTelegramNav.style.display = isAdmin ? 'inline-flex' : 'none';
+    const adminCenterLink = document.getElementById('sidebar-admin-center-link');
+    if (adminCenterLink) {
+      adminCenterLink.style.display = isAdmin ? 'flex' : 'none';
+    }
+    const adminCenterMounted = isAdmin && document.getElementById('admin-settings-host')?.contains(document.getElementById('pane-users'));
+    if (tabUsersNav) tabUsersNav.style.display = adminCenterMounted ? 'none' : (isAdmin ? 'inline-flex' : 'none');
+    if (tabDiscordNav) tabDiscordNav.style.display = adminCenterMounted ? 'none' : (isAdmin ? 'inline-flex' : 'none');
+    if (tabTelegramNav) tabTelegramNav.style.display = adminCenterMounted ? 'none' : (isAdmin ? 'inline-flex' : 'none');
+    if (adminCenterMounted) {
+      const movedTabs = ['security', 'backup', 'webdav'];
+      movedTabs.forEach(name => {
+        const button = document.querySelector(`.settings-tab-btn[data-tab="${name}"]`);
+        if (button) button.style.display = 'none';
+      });
+      if (['users', 'discord', 'telegram', ...movedTabs].includes(tabName)) {
+        tabName = 'account';
+        document.querySelectorAll('.settings-tab-btn').forEach(button => button.classList.toggle('active', button.getAttribute('data-tab') === 'account'));
+        document.querySelectorAll('.settings-tab-pane').forEach(pane => { pane.style.display = pane.id === 'pane-account' ? 'flex' : 'none'; });
+      }
+    }
 
     // If non-admin user somehow opens with an admin tab, fallback to account tab
     if (!isAdmin && (tabName === 'users' || tabName === 'discord' || tabName === 'telegram')) {
@@ -5397,6 +5590,26 @@ const App = {
   async loadAdminUsers() {
     const listEl = document.getElementById('admin-users-list');
     if (!listEl) return;
+    const refreshSecurity = async () => {
+      const auditEl = document.getElementById('security-audit-list');
+      const blockedEl = document.getElementById('blocked-ip-list');
+      if (!auditEl || !blockedEl) return;
+      try {
+        const search = document.getElementById('security-audit-search')?.value.trim() || '';
+        const action = document.getElementById('security-audit-action')?.value || '';
+        const params = new URLSearchParams({ limit: '200' }); if (search) params.set('search', search); if (action) params.set('action', action);
+        const [audit, blocked] = await Promise.all([API.request('GET', `/api/admin/audit-logs?${params}`), API.request('GET', '/api/admin/blocked-ips')]);
+        const rows = audit.logs || audit.auditLogs || [];
+        auditEl.innerHTML = rows.length ? `<table class="data-table"><thead><tr><th>User</th><th>File / details</th><th>Action</th><th>IP</th><th>User-agent</th><th>Time</th><th></th></tr></thead><tbody>${rows.map(x => { let d={}; try { d=JSON.parse(x.details||'{}') || {}; } catch (_) {} return `<tr><td>${UI.escapeHtml(x.user_email || 'Anonymous')}</td><td>${UI.escapeHtml(d.fileName || d.fileId || d.path || '')}</td><td>${UI.escapeHtml(x.action || '')}</td><td>${UI.escapeHtml(x.ip_address || '')}</td><td title="${UI.escapeHtml(x.user_agent || '')}" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${UI.escapeHtml(x.user_agent || '')}</td><td>${UI.escapeHtml(x.created_at || '')}</td><td><button class="btn-block-ip btn-secondary" data-ip="${UI.escapeHtml(x.ip_address || '')}">Block</button></td></tr>`; }).join('')}</tbody></table>` : '<span class="hint">No activity yet.</span>';
+        auditEl.querySelectorAll('.btn-block-ip').forEach(btn => btn.onclick = async () => { const reason = window.prompt(`Reason for blocking ${btn.dataset.ip}:`, 'Suspicious activity') ?? ''; if (!reason) return; await API.request('POST', '/api/admin/blocked-ips', { ip: btn.dataset.ip, reason }); refreshSecurity(); });
+        blockedEl.innerHTML = `<strong>Blocked IPs</strong> ${(blocked.blockedIps || []).map(x => `<span class="badge" style="margin:4px;display:inline-flex;gap:4px;">${UI.escapeHtml(x.ip_address)} <button class="btn-unblock-ip" data-ip="${UI.escapeHtml(x.ip_address)}">Unblock</button></span>`).join('')}`;
+        blockedEl.querySelectorAll('.btn-unblock-ip').forEach(btn => btn.onclick = async () => { await API.request('DELETE', `/api/admin/blocked-ips/${encodeURIComponent(btn.dataset.ip)}`); refreshSecurity(); });
+      } catch (e) { auditEl.textContent = e.message || 'Failed to load security activity'; }
+    };
+    document.getElementById('btn-refresh-security-audit')?.addEventListener('click', refreshSecurity);
+    document.getElementById('security-audit-search')?.addEventListener('input', refreshSecurity);
+    document.getElementById('security-audit-action')?.addEventListener('change', refreshSecurity);
+    refreshSecurity();
 
     listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Loading users...</div>';
 
@@ -5610,6 +5823,7 @@ const App = {
       const enabledToggle = document.getElementById('webdav-enabled');
       const modeSelect = document.getElementById('webdav-permission-mode');
       const usernameInput = document.getElementById('webdav-username');
+      const userEnabledToggle = document.getElementById('webdav-user-enabled');
       const passwordInput = document.getElementById('webdav-password');
       const passwordHint = document.getElementById('webdav-pw-hint');
       const pwStatusText = document.getElementById('webdav-pw-status-text');
@@ -5619,8 +5833,8 @@ const App = {
       // Set values
       if (enabledToggle) enabledToggle.checked = !!data.enabled;
       if (modeSelect && data.permissionMode) modeSelect.value = data.permissionMode;
-      // Username is always the user's own email
       if (usernameInput) usernameInput.value = data.username || data.userEmail || '';
+      if (userEnabledToggle) userEnabledToggle.checked = data.userEnabled !== false;
       if (urlInput && data.webdavUrl) urlInput.value = data.webdavUrl;
 
       // Lock admin-only controls for non-admin users
@@ -6484,3 +6698,29 @@ if (document.readyState === 'loading') {
 } else {
   App.init();
 }
+// Admin-protected recovery and Telegram cleanup actions.
+document.addEventListener('DOMContentLoaded', () => {
+  const adminCenterLink = document.getElementById('sidebar-admin-center-link');
+  if (adminCenterLink) adminCenterLink.addEventListener('click', async (event) => {
+    event.preventDefault();
+    if (!App.user || App.user.role !== 'admin') return;
+    await App.navigateToView('admin-center');
+  });
+  const download = document.getElementById('btn-download-recovery-bundle');
+  if (download) download.addEventListener('click', async () => {
+    const password = window.prompt('Enter your admin password to download the recovery bundle:');
+    if (!password) return;
+    const response = await fetch('/api/settings/download-recovery-bundle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+    if (!response.ok) return window.alert((await response.json().catch(() => ({}))).error || 'Download failed');
+    const blob = await response.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a');
+    a.href = url; a.download = 'clouddrive-recovery-bundle.json'; a.click(); URL.revokeObjectURL(url);
+  });
+  const purge = document.getElementById('btn-purge-telegram-known');
+  if (purge) purge.addEventListener('click', async () => {
+    const password = window.prompt('Admin password:'); if (!password) return;
+    const confirmation = window.prompt('Type DELETE_ALL_TELEGRAM_MESSAGES to permanently delete CloudDrive Telegram uploads:');
+    if (confirmation !== 'DELETE_ALL_TELEGRAM_MESSAGES') return window.alert('Cancelled. Nothing was deleted.');
+    const response = await fetch('/api/settings/telegram/purge-known', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, confirmation }) });
+    const data = await response.json().catch(() => ({})); window.alert(data.message || data.error || 'Cleanup failed');
+  });
+});

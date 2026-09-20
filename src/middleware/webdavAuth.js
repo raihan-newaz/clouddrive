@@ -1,7 +1,12 @@
 const bcrypt = require('bcryptjs');
 const db = require('../db');
+const sessionTracker = require('../services/sessionTracker');
 
 async function webdavAuth(req, res, next) {
+  if (db.isIpBlocked && db.isIpBlocked(req.ip)) {
+    db.logAuditEvent({ action: 'WEBDAV_BLOCKED_IP', ipAddress: req.ip, userAgent: req.get('User-Agent'), details: { method: req.method, path: req.path } });
+    return res.status(403).send('Access denied from this IP address');
+  }
   if (process.env.NODE_ENV === 'production' && process.env.REQUIRE_HTTPS !== 'false' && !req.secure) {
     return res.status(426).send('HTTPS is required for WebDAV');
   }
@@ -31,11 +36,17 @@ async function webdavAuth(req, res, next) {
 
   try {
     // Each user signs into WebDAV with their own email as username
-    const user = db.getUserByEmail(emailOrUser.toLowerCase());
+    const user = db.getUserByEmail(emailOrUser.toLowerCase()) ||
+      (db.getAllUsers ? (db.getAllUsers() || []).map(u => db.getUserById(u.id) || u).find(u => db.getSetting('webdav_username', u.id) === emailOrUser) : null);
     if (!user || user.status === 'suspended') {
       res.setHeader('WWW-Authenticate', 'Basic realm="CloudDrive WebDAV Vault"');
       return res.status(401).send('Invalid credentials');
     }
+    if (db.getSetting('webdav_user_enabled', user.id) === 'false') {
+      return res.status(403).send('WebDAV access is disabled for this user');
+    }
+    if (db.getSetting('maintenance_mode') === 'true' && user.role !== 'admin') return res.status(503).send('Service is in maintenance mode');
+    if (sessionTracker.isRevoked(req.ip, req.get('User-Agent') || 'Generic-WebDAV', user.email)) return res.status(401).send('This WebDAV device session has been revoked');
 
     // 1. Check per-user dedicated WebDAV password first
     const perUserPassHash = db.getSetting('webdav_user_password_hash', user.id);
@@ -46,6 +57,7 @@ async function webdavAuth(req, res, next) {
         return res.status(401).send('Invalid credentials');
       }
       req.user = user;
+      sessionTracker.trackWebDavRequest(req, user.email);
       return next();
     }
 
@@ -57,6 +69,7 @@ async function webdavAuth(req, res, next) {
     }
 
     req.user = user;
+    sessionTracker.trackWebDavRequest(req, user.email);
     next();
   } catch (err) {
     res.setHeader('WWW-Authenticate', 'Basic realm="CloudDrive WebDAV Vault"');

@@ -74,7 +74,10 @@
   --radius-full: 9999px;
   
   --glass-blur: 16px;
-  --font-sans: 'Google Sans', 'Google Sans Text', 'Noto Sans Bengali', 'Hind Siliguri', 'Roboto', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, 'Kalpurush', 'SolaimanLipi', sans-serif;
+  --font-display: 'Manrope', 'Noto Sans Bengali', 'Hind Siliguri', sans-serif;
+  --font-ui: 'Inter', 'Noto Sans Bengali', 'Hind Siliguri', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-sans: var(--font-ui);
   --header-height: 64px;
   --sidebar-width: 240px;
   --toolbar-height: 52px;

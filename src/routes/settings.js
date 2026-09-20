@@ -343,7 +343,7 @@ router.post('/telegram/disconnect', adminOnly, async (req, res) => {
 });
 
 // Clear Cache
-router.post('/clear-cache', (req, res) => {
+router.post('/clear-cache', adminOnly, (req, res) => {
   const ok = cacheManager.clear();
   res.json({ success: ok, message: ok ? 'Cache cleared' : 'Could not clear cache' });
 });
@@ -416,6 +416,72 @@ router.get('/export-manifest', (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Failed to generate emergency manifest: ' + err.message });
   }
+});
+
+// Admin-only offline recovery bundle. This intentionally contains the database,
+// provider configuration, and encryption metadata needed for a disaster restore.
+// The response is never persisted server-side; the browser downloads it directly.
+router.get('/download-recovery-bundle', adminOnly, (req, res) => {
+  return res.status(405).json({ error: 'Password required. Use the download button in Settings.' });
+});
+
+router.post('/download-recovery-bundle', adminOnly, async (req, res) => {
+  try {
+    const password = clean(req.body && req.body.password);
+    if (!password || !(await bcrypt.compare(password, req.user.password_hash || req.user.password || ''))) {
+      return res.status(401).json({ error: 'Invalid admin password' });
+    }
+    const dbPath = path.join(config.DATA_DIR, 'clouddrive.db');
+    if (!fs.existsSync(dbPath)) return res.status(404).json({ error: 'Database not found' });
+    const users = db.getAllUsers().map(userSummary => {
+      const user = db.getUserById(userSummary.id) || userSummary;
+      const files = db.getFiles(user.id) || [];
+      return {
+        id: user.id, email: user.email, name: user.name, role: user.role,
+        encryption_key: user.encryption_key, file_prefix: user.file_prefix,
+        files: files.map(file => ({
+          ...file,
+          chunks: (db.getFileChunks(file.id) || []).map(chunk => ({
+            id: chunk.id, file_id: chunk.file_id, chunk_index: chunk.chunk_index,
+            size: chunk.size, iv: chunk.iv, auth_tag: chunk.auth_tag,
+            sha256: chunk.sha256, replicas: db.getChunkReplicas ? db.getChunkReplicas(chunk.id) : []
+          }))
+        }))
+      };
+    });
+    const bundle = {
+      format: 'clouddrive-disaster-recovery-v1',
+      warning: 'Contains encryption keys and provider credentials. Store offline in an encrypted location.',
+      exported_at: new Date().toISOString(),
+      encryption: { database_algorithm: 'AES-256-GCM', database_key_env: 'ENCRYPTION_KEY' },
+      env: Object.fromEntries(['JWT_SECRET', 'ENCRYPTION_KEY', 'DISCORD_BOT_TOKEN', 'DISCORD_CHANNEL_ID', 'DISCORD_GUILD_ID', 'TELEGRAM_API_ID', 'TELEGRAM_API_HASH', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHANNEL_ID', 'SESSION_STRING'].map(key => [key, process.env[key] || ''])),
+      database_base64: fs.readFileSync(dbPath).toString('base64'),
+      users
+    };
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="clouddrive-recovery-bundle-${stamp}.json"`);
+    res.send(JSON.stringify(bundle));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create recovery bundle: ' + err.message });
+  }
+});
+
+// Admin-only cleanup of all Telegram messages known to CloudDrive. Telegram
+// bots cannot enumerate arbitrary historical channel messages, so this safely
+// deletes only stored replica IDs; the interactive user-session purge tool is
+// required for messages outside CloudDrive.
+router.post('/telegram/purge-known', adminOnly, async (req, res) => {
+  try {
+    const password = clean(req.body && req.body.password);
+    const confirm = clean(req.body && req.body.confirmation);
+    if (confirm !== 'DELETE_ALL_TELEGRAM_MESSAGES') return res.status(400).json({ error: 'Type DELETE_ALL_TELEGRAM_MESSAGES to confirm' });
+    if (!password || !(await bcrypt.compare(password, req.user.password_hash || req.user.password || ''))) return res.status(401).json({ error: 'Invalid admin password' });
+    const replicas = [];
+    for (const file of db.getAllFiles(null, true) || []) replicas.push(...(db.getFileReplicas(file.id) || []).filter(r => r.provider === 'telegram'));
+    if (replicas.length) await storageManager.deleteChunksBulk(replicas);
+    res.json({ success: true, deleted: replicas.length, message: 'Known CloudDrive Telegram messages deleted. External messages require the user-session purge tool.' });
+  } catch (err) { res.status(500).json({ error: 'Telegram cleanup failed: ' + err.message }); }
 });
 
 // Import SQLite Database or User Data Package
@@ -613,15 +679,17 @@ router.get('/webdav', async (req, res) => {
     // Per-user WebDAV password stored in app_settings keyed to this user
     const userWebdavPassHash = db.getSetting('webdav_user_password_hash', req.user.id);
     const hasCustomPassword = Boolean(userWebdavPassHash);
+    const userEnabled = db.getSetting('webdav_user_enabled', req.user.id) !== 'false';
 
     // Each user's WebDAV username is their own email
-    const username = req.user ? req.user.email : (db.getSetting('webdav_username') || 'admin');
+    const username = req.user ? (db.getSetting('webdav_username', req.user.id) || req.user.email) : 'admin';
 
     res.json({
       enabled: globalEnabled,
       permissionMode,
       username,
       hasCustomPassword,
+      userEnabled,
       urlPath: '/webdav',
       isAdmin,
       userEmail: req.user ? req.user.email : '',
@@ -636,7 +704,7 @@ router.get('/webdav', async (req, res) => {
 router.post('/webdav', async (req, res) => {
   try {
     const isAdmin = req.user && req.user.role === 'admin';
-    const { enabled, permissionMode, password, resetPassword } = req.body;
+    const { enabled, permissionMode, password, username, resetPassword, userEnabled } = req.body;
 
     // Admin-only: global enable/disable
     if (enabled !== undefined) {
@@ -665,9 +733,18 @@ router.post('/webdav', async (req, res) => {
 
     // Any user: set/reset their own WebDAV password (stored per-user)
     const userId = req.user.id;
+    if (userEnabled !== undefined) db.setSetting('webdav_user_enabled', userEnabled ? 'true' : 'false', userId);
+    if (username !== undefined) {
+      const normalized = String(username).trim().toLowerCase();
+      if (!/^[a-z0-9][a-z0-9._-]{2,63}$/.test(normalized)) return res.status(400).json({ error: 'Username must be 3-64 letters, numbers, dot, underscore, or hyphen' });
+      const taken = (db.getAllUsers ? db.getAllUsers() : []).some(u => u.id !== userId && db.getSetting('webdav_username', u.id) === normalized);
+      if (taken) return res.status(409).json({ error: 'That WebDAV username is already in use' });
+      db.setSetting('webdav_username', normalized, userId);
+    }
     if (resetPassword) {
       db.setSetting('webdav_user_password_hash', '', userId);
     } else if (password !== undefined && password.trim()) {
+      if (password.trim().length < 10) return res.status(400).json({ error: 'WebDAV password must be at least 10 characters' });
       const passHash = bcrypt.hashSync(password.trim(), 10);
       db.setSetting('webdav_user_password_hash', passHash, userId);
     }
@@ -684,7 +761,8 @@ router.post('/webdav', async (req, res) => {
       settings: {
         enabled: globalEnabled,
         permissionMode: db.getSetting('webdav_permission_mode') || process.env.WEBDAV_PERMISSION_MODE || 'full',
-        username: req.user ? req.user.email : '',
+        username: db.getSetting('webdav_username', userId) || req.user.email,
+        userEnabled: db.getSetting('webdav_user_enabled', userId) !== 'false',
         hasCustomPassword,
         isAdmin
       }
@@ -706,9 +784,13 @@ router.post('/webdav/test-auth', (req, res) => {
     const testEmail = username.trim().toLowerCase();
     const testPass = password;
 
-    // Find the user by email
-    const allUsers = db.getAllUsers ? db.getAllUsers() : [];
-    const matchedDbUser = allUsers.find(u => u.email.toLowerCase() === testEmail);
+    // A signed-in user may test only their own WebDAV identity. This avoids
+    // turning the helper endpoint into a credential-oracle for other accounts.
+    const ownWebdavUsername = (db.getSetting('webdav_username', req.user.id) || req.user.email).toLowerCase();
+    if (testEmail !== req.user.email.toLowerCase() && testEmail !== ownWebdavUsername) {
+      return res.status(403).json({ success: false, error: 'You can only test your own WebDAV credentials.' });
+    }
+    const matchedDbUser = req.user;
 
     if (!matchedDbUser || matchedDbUser.status !== 'active') {
       return res.status(401).json({ success: false, error: 'User not found or account suspended.' });

@@ -5,6 +5,7 @@ const db = require('../db');
 const crypto = require('../crypto');
 const storageManager = require('../storage/StorageManager');
 const config = require('../config');
+const { notifySecurityEvent } = require('./notificationService');
 
 let backupInterval = null;
 let isBackingUp = false;
@@ -102,6 +103,7 @@ async function performDatabaseBackup(userId = null, targetProvider = 'all') {
       try { fs.unlinkSync(tempEncPath); } catch (e) {}
     }
     console.error('[BackupService] Database backup failed:', err.message);
+    notifySecurityEvent('Backup failure', { scope: userId ? 'user backup' : 'database backup', provider: targetProvider, error: err.message });
     throw err;
   } finally {
     isBackingUp = false;
@@ -305,6 +307,9 @@ async function performUserBackup(userId, targetProvider = 'all') {
       backup: uploadedRecords[0],
       message: `Personal cloud backup created and encrypted successfully on ${provNames}!`
     };
+  } catch (err) {
+    notifySecurityEvent('Backup failure', { scope: 'user backup', userId, provider: targetProvider, error: err.message });
+    throw err;
   } finally {
     try { if (fs.existsSync(tempJsonPath)) fs.unlinkSync(tempJsonPath); } catch (e) {}
     try { if (fs.existsSync(tempEncPath)) fs.unlinkSync(tempEncPath); } catch (e) {}
@@ -429,6 +434,7 @@ function startAutomatedBackups() {
       }
     } catch (e) {
       console.warn('[BackupService] Automated backup schedule check error:', e.message);
+      notifySecurityEvent('Automated backup failure', { error: e.message });
     }
   };
 

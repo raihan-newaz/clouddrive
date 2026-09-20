@@ -5,6 +5,8 @@ const db = require('../db');
 const cryptoModule = require('../crypto');
 const authMiddleware = require('../middleware/auth');
 const { adminOnly } = require('../middleware/auth');
+const sessionTracker = require('../services/sessionTracker');
+const { notifySecurityEvent } = require('../services/notificationService');
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -26,6 +28,69 @@ function parseStorageLimit(val) {
   }
   return Math.round(num);
 }
+
+// Dashboard summary stays in the admin API so the browser never needs database access.
+router.get('/stats', (req, res) => {
+  try {
+    const users = db.get('SELECT COUNT(*) AS count FROM users')?.count || 0;
+    const activeUsers = db.get("SELECT COUNT(*) AS count FROM users WHERE status = 'active'")?.count || 0;
+    const files = db.get('SELECT COUNT(*) AS count FROM files WHERE COALESCE(is_trashed, 0) = 0')?.count || 0;
+    const storageUsed = db.get('SELECT COALESCE(SUM(size), 0) AS total FROM files WHERE COALESCE(is_trashed, 0) = 0')?.total || 0;
+    const blockedIps = db.get('SELECT COUNT(*) AS count FROM blocked_ips')?.count || 0;
+    const securityEvents = db.get("SELECT COUNT(*) AS count FROM audit_logs WHERE created_at >= datetime('now', '-24 hours')")?.count || 0;
+    res.json({ success: true, stats: { users, activeUsers, files, storageUsed, blockedIps, securityEvents } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load dashboard stats: ' + error.message });
+  }
+});
+
+router.get('/maintenance', (req, res) => res.json({ success: true, enabled: db.getSetting('maintenance_mode') === 'true' }));
+router.put('/maintenance', (req, res) => {
+  const enabled = Boolean(req.body?.enabled);
+  db.setSetting('maintenance_mode', enabled ? 'true' : 'false');
+  db.logAuditEvent({ userId: req.user.id, userEmail: req.user.email, action: enabled ? 'MAINTENANCE_ENABLED' : 'MAINTENANCE_DISABLED', ipAddress: req.ip, userAgent: req.get('User-Agent') });
+  res.json({ success: true, enabled });
+});
+
+router.get('/sessions', (req, res) => {
+  const sessions = sessionTracker.getActiveSessions().map(session => ({ ...session, isCurrent: session.id === req.authSessionId }));
+  res.json({ success: true, sessions });
+});
+router.post('/sessions/:id/revoke', (req, res) => {
+  const session = sessionTracker.getActiveSessions().find(item => item.id === req.params.id);
+  if (!session) return res.status(404).json({ error: 'Session not found or server was restarted' });
+  sessionTracker.revokeSession(session.id);
+  db.logAuditEvent({ userId: req.user.id, userEmail: req.user.email, action: 'DEVICE_SESSION_REVOKED', details: { sessionId: session.id, type: session.type, username: session.username }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
+  res.json({ success: true });
+});
+
+router.get('/notification-settings', (req, res) => {
+  res.json({ success: true, settings: {
+    enabled: db.getSetting('alerts_enabled') !== 'false', telegram: db.getSetting('alert_telegram_enabled') !== 'false',
+    discord: db.getSetting('alert_discord_enabled') !== 'false', email: db.getSetting('alert_email_enabled') !== 'false',
+    emailTo: db.getSetting('alert_email_to') || process.env.ALERT_EMAIL_TO || '',
+    telegramConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN && (process.env.TELEGRAM_ALERT_CHAT_ID || process.env.TELEGRAM_CHANNEL_ID)),
+    discordConfigured: Boolean(process.env.DISCORD_BOT_TOKEN && (process.env.DISCORD_ALERT_CHANNEL_ID || process.env.DISCORD_CHANNEL_ID)),
+    emailConfigured: Boolean(process.env.SMTP_HOST && (db.getSetting('alert_email_to') || process.env.ALERT_EMAIL_TO))
+  } });
+});
+router.put('/notification-settings', (req, res) => {
+  const body = req.body || {};
+  [['alerts_enabled', body.enabled], ['alert_telegram_enabled', body.telegram], ['alert_discord_enabled', body.discord], ['alert_email_enabled', body.email]].forEach(([key, value]) => {
+    if (typeof value === 'boolean') db.setSetting(key, value ? 'true' : 'false');
+  });
+  if (body.emailTo !== undefined) {
+    const email = String(body.emailTo).trim();
+    if (email && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)) return res.status(400).json({ error: 'Valid alert email is required' });
+    db.setSetting('alert_email_to', email);
+  }
+  db.logAuditEvent({ userId: req.user.id, userEmail: req.user.email, action: 'NOTIFICATION_SETTINGS_UPDATED', ipAddress: req.ip, userAgent: req.get('User-Agent') });
+  res.json({ success: true });
+});
+router.post('/notification-settings/test', async (req, res) => {
+  await notifySecurityEvent('Notification test', { by: req.user.email, time: new Date().toISOString() });
+  res.json({ success: true, message: 'Test alert queued for configured channels.' });
+});
 
 // List all users
 router.get('/users', (req, res) => {
@@ -197,9 +262,14 @@ router.get('/audit-logs', (req, res) => {
     const offset = parseInt(req.query.offset, 10) || 0;
     const action = req.query.action || null;
     const userId = req.query.userId || null;
+    const user = req.query.user || null;
+    const file = req.query.file || null;
+    const ip = req.query.ip || null;
+    const search = req.query.search || null;
 
-    const logs = db.getAuditLogs({ limit, offset, userId, action });
-    const total = db.getAuditLogCount({ userId, action });
+    const filters = { limit, offset, userId, action, user, file, ip, search };
+    const logs = db.getAuditLogs(filters);
+    const total = db.getAuditLogCount(filters);
 
     res.json({
       success: true,
@@ -211,6 +281,23 @@ router.get('/audit-logs', (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Failed to retrieve audit logs: ' + err.message });
   }
+});
+
+router.get('/blocked-ips', (req, res) => res.json({ success: true, blockedIps: db.getBlockedIps() }));
+router.post('/blocked-ips', (req, res) => {
+  const ip = String(req.body?.ip || '').trim();
+  if (!ip || ip.length > 64) return res.status(400).json({ error: 'Valid IP address is required' });
+  if (ip === req.ip || ip === String(req.ip || '').replace(/^::ffff:/, '')) {
+    return res.status(400).json({ error: 'You cannot block the IP address of your current admin session' });
+  }
+  db.blockIp(ip, String(req.body?.reason || '').slice(0, 200), req.user.id);
+  db.logAuditEvent({ userId: req.user.id, action: 'IP_BLOCKED', details: { ip }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
+  res.json({ success: true });
+});
+router.delete('/blocked-ips/:ip', (req, res) => {
+  db.unblockIp(req.params.ip);
+  db.logAuditEvent({ userId: req.user.id, action: 'IP_UNBLOCKED', details: { ip: req.params.ip }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
+  res.json({ success: true });
 });
 
 // Admin Storage Reconcile & Cross-Cloud Auto-Heal (System-wide)

@@ -231,6 +231,7 @@ async function initialize() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  db.run(`CREATE TABLE IF NOT EXISTS blocked_ips (ip_address TEXT PRIMARY KEY, reason TEXT, blocked_by TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
 
   // Indexes for high-speed queries
   try { db.run('CREATE INDEX IF NOT EXISTS idx_files_user_trashed ON files(user_id, is_trashed);'); } catch (e) {}
@@ -1470,14 +1471,14 @@ function logAuditEvent({ userId = null, userEmail = null, action, details = null
     userEmail,
     action,
     detailStr,
-    ipAddress,
+    normalizeIp(ipAddress),
     userAgent
   ]);
 
   return { id, action, created_at: new Date().toISOString() };
 }
 
-function getAuditLogs({ limit = 50, offset = 0, userId = null, action = null } = {}) {
+function getAuditLogs({ limit = 50, offset = 0, userId = null, action = null, user = null, file = null, ip = null, search = null } = {}) {
   let sql = 'SELECT * FROM audit_logs WHERE 1=1';
   const params = [];
 
@@ -1491,13 +1492,18 @@ function getAuditLogs({ limit = 50, offset = 0, userId = null, action = null } =
     params.push(action);
   }
 
+  if (user) { sql += ' AND (user_id LIKE ? OR user_email LIKE ?)'; params.push(`%${user}%`, `%${user}%`); }
+  if (file) { sql += ' AND details LIKE ?'; params.push(`%${file}%`); }
+  if (ip) { sql += ' AND ip_address LIKE ?'; params.push(`%${ip}%`); }
+  if (search) { sql += ' AND (user_email LIKE ? OR action LIKE ? OR ip_address LIKE ? OR details LIKE ? OR user_agent LIKE ?)'; params.push(...Array(5).fill(`%${search}%`)); }
+
   sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
   params.push(Math.min(200, Math.max(1, limit)), Math.max(0, offset));
 
   return all(sql, params);
 }
 
-function getAuditLogCount({ userId = null, action = null } = {}) {
+function getAuditLogCount({ userId = null, action = null, user = null, file = null, ip = null, search = null } = {}) {
   let sql = 'SELECT COUNT(*) as count FROM audit_logs WHERE 1=1';
   const params = [];
 
@@ -1511,9 +1517,24 @@ function getAuditLogCount({ userId = null, action = null } = {}) {
     params.push(action);
   }
 
+  if (user) { sql += ' AND (user_id LIKE ? OR user_email LIKE ?)'; params.push(`%${user}%`, `%${user}%`); }
+  if (file) { sql += ' AND details LIKE ?'; params.push(`%${file}%`); }
+  if (ip) { sql += ' AND ip_address LIKE ?'; params.push(`%${ip}%`); }
+  if (search) { sql += ' AND (user_email LIKE ? OR action LIKE ? OR ip_address LIKE ? OR details LIKE ? OR user_agent LIKE ?)'; params.push(...Array(5).fill(`%${search}%`)); }
+
   const row = get(sql, params);
   return row ? row.count : 0;
 }
+
+function normalizeIp(ip) {
+  if (!ip) return null;
+  const value = String(ip).trim().replace(/^\[|\]$/g, '');
+  return value.startsWith('::ffff:') ? value.slice(7) : value;
+}
+function isIpBlocked(ip) { return Boolean(get('SELECT ip_address FROM blocked_ips WHERE ip_address = ?', [normalizeIp(ip)])); }
+function getBlockedIps() { return all('SELECT * FROM blocked_ips ORDER BY created_at DESC'); }
+function blockIp(ip, reason = '', blockedBy = null) { run('INSERT OR REPLACE INTO blocked_ips (ip_address, reason, blocked_by) VALUES (?, ?, ?)', [normalizeIp(ip), reason, blockedBy]); }
+function unblockIp(ip) { run('DELETE FROM blocked_ips WHERE ip_address = ?', [normalizeIp(ip)]); }
 
 module.exports = {
   initialize,
@@ -1535,6 +1556,10 @@ module.exports = {
   logAuditEvent,
   getAuditLogs,
   getAuditLogCount,
+  isIpBlocked,
+  getBlockedIps,
+  blockIp,
+  unblockIp,
   
   // Folders
   createFolder,

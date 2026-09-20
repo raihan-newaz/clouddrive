@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const authMiddleware = require('../middleware/auth');
+const { notifySecurityEvent } = require('../services/notificationService');
 const { uploadLimiter } = require('../middleware/rateLimiter');
 const storageManager = require('../storage/StorageManager');
 const db = require('../db');
@@ -11,15 +12,30 @@ const cryptoModule = require('../crypto');
 const replicationWorker = require('../services/replicationWorker');
 const cacheManager = require('../services/cacheManager');
 const eventBroadcaster = require('../services/eventBroadcaster');
+const { UploadQueue, UploadQueueFullError } = require('../services/uploadQueue');
 const config = require('../config');
 const { verifyFolderToken } = require('../securityTokens');
 
 const router = express.Router();
 router.use(authMiddleware);
 
+fs.mkdirSync(config.TMP_DIR, { recursive: true });
 const upload = multer({
-  storage: multer.memoryStorage(),
+  // Keep waiting chunks on disk. Memory storage lets queued multipart requests
+  // consume RAM before the server-side queue can apply backpressure.
+  storage: multer.diskStorage({
+    destination: (_req, _file, callback) => callback(null, config.TMP_DIR),
+    filename: (_req, _file, callback) => callback(null, `upload-${Date.now()}-${uuidv4()}.part`)
+  }),
   limits: { fileSize: 64 * 1024 * 1024, files: 1, fields: 20 }
+});
+const STORAGE_MODES = new Set(['discord', 'telegram', 'dual']);
+const PROVIDERS = new Set(['discord', 'telegram']);
+const UPLOAD_STRATEGIES = new Set(['primary_first', 'simultaneous', 'parallel_both', 'auto']);
+const uploadQueue = new UploadQueue({
+  maxActive: config.MAX_ACTIVE_UPLOAD_JOBS,
+  maxPerUser: config.MAX_UPLOAD_JOBS_PER_USER,
+  maxQueued: config.MAX_QUEUED_UPLOAD_JOBS
 });
 
 function requireUnlockedFile(req, res, file) {
@@ -181,10 +197,13 @@ router.post('/upload/init', uploadLimiter, async (req, res) => {
   let mode = storageMode || req.user.default_storage_mode || db.getSetting('default_storage_mode') || config.DEFAULT_STORAGE_MODE || 'dual';
   if (folderId && folderId !== 'null' && folderId !== 'root') {
     const folder = db.getFolderById(folderId, req.user.id);
-    if (folder && folder.storage_policy) {
-      mode = folder.storage_policy;
+    if (!folder) return res.status(404).json({ error: 'Folder not found' });
+    if ((folder.is_locked || folder.password_hash) && !verifyFolderToken(folder.id, req.user.id, req.headers['x-folder-token'] || req.query.folderToken)) {
+      return res.status(403).json({ error: 'Folder password verification required' });
     }
+    if (folder.storage_policy) mode = folder.storage_policy;
   }
+  if (!STORAGE_MODES.has(mode)) return res.status(400).json({ error: 'Invalid storage mode' });
 
   if (mode === 'dual') {
     if (!isDiscordEnabled && isTelegramEnabled) mode = 'telegram';
@@ -199,14 +218,14 @@ router.post('/upload/init', uploadLimiter, async (req, res) => {
   } else {
     primary = primary || db.getSetting('primary_provider') || config.PRIMARY_PROVIDER || 'telegram';
   }
+  if (!PROVIDERS.has(primary)) return res.status(400).json({ error: 'Invalid primary provider' });
 
   if (primary === 'discord' && !isDiscordEnabled && isTelegramEnabled) primary = 'telegram';
   if (primary === 'telegram' && !isTelegramEnabled && isDiscordEnabled) primary = 'discord';
 
-  const activeStrategy = req.body.uploadStrategy || db.getSetting('upload_strategy') || config.UPLOAD_STRATEGY || 'primary_first';
-  const isEnc = req.body.encryptionEnabled !== undefined
-    ? (req.body.encryptionEnabled === true || req.body.encryptionEnabled === 'true' || req.body.encryptionEnabled === 1 || req.body.encryptionEnabled === '1')
-    : (db.getSetting('encryption_enabled', req.user.id) !== 'false');
+  const activeStrategy = db.getSetting('upload_strategy', req.user.id) || config.UPLOAD_STRATEGY || 'primary_first';
+  if (!UPLOAD_STRATEGIES.has(activeStrategy)) return res.status(400).json({ error: 'Invalid upload strategy' });
+  const isEnc = db.getSetting('encryption_enabled', req.user.id) !== 'false';
   const sessionId = uuidv4();
   const cleanFileName = decodeUtf8FileName(fileName);
 
@@ -255,31 +274,30 @@ router.post('/upload/chunk', uploadLimiter, upload.single('chunk'), async (req, 
   if (!Number.isInteger(index) || index < 0 || index >= session.total_chunks) {
     return res.status(400).json({ error: 'Invalid chunk index' });
   }
-  const plainBuffer = req.file.buffer;
-
-  const isEncEnabled = session.encryption_enabled !== undefined && session.encryption_enabled !== null
-    ? session.encryption_enabled === 1
-    : (db.getSetting('encryption_enabled', req.user.id) !== 'false');
-
-  // 1. Encrypt chunk in memory (or preserve plaintext if encryption is disabled)
-  const encResult = cryptoModule.encryptChunkBuffer(
-    plainBuffer,
-    req.user.encryption_key,
-    sessionId,
-    index,
-    isEncEnabled
-  );
-
-  const remoteFileName = formatRemoteFileName(
-    session.file_name,
-    req.user.file_prefix,
-    index,
-    session.total_chunks,
-    isEncEnabled
-  );
-
   try {
-    const activeUploadStrategy = session.upload_strategy || db.getSetting('upload_strategy') || config.UPLOAD_STRATEGY || 'primary_first';
+    const result = await uploadQueue.run(req.user.id, async () => {
+      const plainBuffer = await fs.promises.readFile(req.file.path);
+      const isEncEnabled = session.encryption_enabled !== undefined && session.encryption_enabled !== null
+        ? session.encryption_enabled === 1
+        : (db.getSetting('encryption_enabled', req.user.id) !== 'false');
+
+      // Encrypt and send one chunk as one bounded job. Holding the queue slot
+      // through provider I/O prevents a burst of encrypted buffers from piling up.
+      const encResult = cryptoModule.encryptChunkBuffer(
+        plainBuffer,
+        req.user.encryption_key,
+        sessionId,
+        index,
+        isEncEnabled
+      );
+      const remoteFileName = formatRemoteFileName(
+        session.file_name,
+        req.user.file_prefix,
+        index,
+        session.total_chunks,
+        isEncEnabled
+      );
+      const activeUploadStrategy = session.upload_strategy || db.getSetting('upload_strategy') || config.UPLOAD_STRATEGY || 'primary_first';
 
     if (session.storage_mode === 'dual' && (activeUploadStrategy === 'parallel_both' || activeUploadStrategy === 'simultaneous')) {
       const secondaryProvider = session.primary_provider === 'discord' ? 'telegram' : 'discord';
@@ -340,13 +358,13 @@ router.post('/upload/chunk', uploadLimiter, upload.single('chunk'), async (req, 
       const activeProvider = uploadResult ? session.primary_provider : secondaryProvider;
       const activeRemoteId = uploadResult ? uploadResult.remoteId : secResult.remoteId;
 
-      return res.json({
+      return {
         success: true,
         chunkIndex: index,
         provider: activeProvider,
         remoteId: activeRemoteId,
         secondaryRemoteId: secResult ? secResult.remoteId : null
-      });
+      };
     } else {
       // Primary provider upload with automatic failover
       const uploadResult = await storageManager.uploadChunkWithFailover(
@@ -374,17 +392,23 @@ router.post('/upload/chunk', uploadLimiter, upload.single('chunk'), async (req, 
         encResult.sha256
       ]);
 
-      return res.json({
+      return {
         success: true,
         chunkIndex: index,
         provider: actualProvider,
         remoteId: uploadResult.remoteId,
         failoverUsed: !!uploadResult.failoverUsed
-      });
+      };
     }
+    });
+    return res.json(result);
   } catch (err) {
     console.error(`[Files] Chunk upload error for session ${sessionId} chunk ${index}:`, err.message);
-    res.status(500).json({ error: `Upload failed: ${err.message}` });
+    notifySecurityEvent('Upload failure', { user: req.user.email, ip: req.ip, sessionId, chunk: index, error: err.message });
+    const status = err instanceof UploadQueueFullError ? 429 : 500;
+    res.status(status).json({ error: err.message || `Upload failed: ${err.message}`, retryAfter: status === 429 ? 5 : undefined });
+  } finally {
+    if (req.file && req.file.path) fs.promises.unlink(req.file.path).catch(() => {});
   }
 });
 
@@ -590,8 +614,13 @@ router.post('/upload', uploadLimiter, upload.single('file'), async (req, res) =>
   let mode = storageMode || req.user.default_storage_mode || db.getSetting('default_storage_mode') || config.DEFAULT_STORAGE_MODE || 'dual';
   if (folderId && folderId !== 'null' && folderId !== 'root') {
     const folder = db.getFolderById(folderId, req.user.id);
-    if (folder && folder.storage_policy) mode = folder.storage_policy;
+    if (!folder) return res.status(404).json({ error: 'Folder not found' });
+    if ((folder.is_locked || folder.password_hash) && !verifyFolderToken(folder.id, req.user.id, req.headers['x-folder-token'] || req.query.folderToken)) {
+      return res.status(403).json({ error: 'Folder password verification required' });
+    }
+    if (folder.storage_policy) mode = folder.storage_policy;
   }
+  if (!STORAGE_MODES.has(mode)) return res.status(400).json({ error: 'Invalid storage mode' });
 
   if (mode === 'dual') {
     if (!isDiscordEnabled && isTelegramEnabled) mode = 'telegram';
@@ -606,6 +635,7 @@ router.post('/upload', uploadLimiter, upload.single('file'), async (req, res) =>
   } else {
     primary = primary || db.getSetting('primary_provider') || config.PRIMARY_PROVIDER || 'telegram';
   }
+  if (!PROVIDERS.has(primary)) return res.status(400).json({ error: 'Invalid primary provider' });
 
   if (primary === 'discord' && !isDiscordEnabled && isTelegramEnabled) primary = 'telegram';
   if (primary === 'telegram' && !isTelegramEnabled && isDiscordEnabled) primary = 'discord';
@@ -613,28 +643,24 @@ router.post('/upload', uploadLimiter, upload.single('file'), async (req, res) =>
   const fileId = uuidv4();
   const finalName = fileName;
 
-  const isEnc = req.body.encryptionEnabled !== undefined
-    ? (req.body.encryptionEnabled === true || req.body.encryptionEnabled === 'true' || req.body.encryptionEnabled === 1 || req.body.encryptionEnabled === '1')
-    : (db.getSetting('encryption_enabled', req.user.id) !== 'false');
-
-  // 1. Encrypt in RAM (or pass plaintext if encryption is disabled)
-  const encResult = cryptoModule.encryptChunkBuffer(
-    req.file.buffer,
-    req.user.encryption_key,
-    fileId,
-    0,
-    isEnc
-  );
-
-  const remoteFileName = formatRemoteFileName(
-    fileName,
-    req.user.file_prefix,
-    0,
-    1,
-    isEnc
-  );
-
   try {
+    const result = await uploadQueue.run(req.user.id, async () => {
+      const plainBuffer = await fs.promises.readFile(req.file.path);
+      const isEnc = db.getSetting('encryption_enabled', req.user.id) !== 'false';
+      const encResult = cryptoModule.encryptChunkBuffer(
+        plainBuffer,
+        req.user.encryption_key,
+        fileId,
+        0,
+        isEnc
+      );
+      const remoteFileName = formatRemoteFileName(
+        fileName,
+        req.user.file_prefix,
+        0,
+        1,
+        isEnc
+      );
     // 2. Upload with automatic failover
     const uploadResult = await storageManager.uploadChunkWithFailover(
       primary,
@@ -757,13 +783,19 @@ router.post('/upload', uploadLimiter, upload.single('file'), async (req, res) =>
     const savedFile = db.getFileById(fileId, req.user.id);
     eventBroadcaster.broadcast('file_uploaded', { file: savedFile, userId: req.user.id }, req.user.id);
 
-    res.json({
+    return {
       success: true,
       file: savedFile
+    };
     });
+    return res.json(result);
   } catch (err) {
     console.error(`[Files] Single upload failed:`, err.message);
-    res.status(500).json({ error: `Upload failed: ${err.message}` });
+    notifySecurityEvent('Upload failure', { user: req.user.email, ip: req.ip, error: err.message });
+    const status = err instanceof UploadQueueFullError ? 429 : 500;
+    res.status(status).json({ error: err.message || `Upload failed: ${err.message}`, retryAfter: status === 429 ? 5 : undefined });
+  } finally {
+    if (req.file && req.file.path) fs.promises.unlink(req.file.path).catch(() => {});
   }
 });
 
@@ -774,6 +806,7 @@ router.get('/:id/download', async (req, res) => {
   const file = db.getFileById(id, req.user.id);
   if (!file) return res.status(404).json({ error: 'File not found' });
   if (!requireUnlockedFile(req, res, file)) return;
+  db.logAuditEvent({ userId: req.user.id, userEmail: req.user.email, action: 'FILE_DOWNLOAD', details: { fileId: file.id, fileName: file.name }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
 
   const isDiscordEnabled = db.getSetting('discord_enabled') !== 'false';
   const isTelegramEnabled = db.getSetting('telegram_enabled') !== 'false';
@@ -839,6 +872,7 @@ router.get('/:id/stream', async (req, res) => {
   const file = db.getFileById(id, req.user.id);
   if (!file) return res.status(404).send('File not found');
   if (!requireUnlockedFile(req, res, file)) return;
+  db.logAuditEvent({ userId: req.user.id, userEmail: req.user.email, action: 'FILE_VIEW', details: { fileId: file.id, fileName: file.name, access: 'stream' }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
 
   const isDiscordEnabled = db.getSetting('discord_enabled') !== 'false';
   const isTelegramEnabled = db.getSetting('telegram_enabled') !== 'false';
@@ -848,63 +882,149 @@ router.get('/:id/stream', async (req, res) => {
   }
 
   const mimeType = file.mime_type || 'application/octet-stream';
-  const totalSize = file.size;
+  const totalSize = Number(file.size);
   const rangeHeader = req.headers.range;
 
   try {
     const chunks = db.getAllFileChunksWithReplicas(file.id);
-
-    // Check LRU full-file cache first
-    let cachedBuffer = cacheManager.get(file.id);
-
-    if (!cachedBuffer) {
-      // Assemble decrypted chunks into memory / cache
-      const decryptedParts = [];
-      for (const chunk of chunks) {
-        let chunkPlain = cacheManager.get(file.id, chunk.chunk_index);
-        if (!chunkPlain) {
-          const downloaded = await storageManager.downloadChunkWithFailover(
-            chunk.replicas,
-            file.primary_provider
-          );
-          chunkPlain = cryptoModule.decryptChunkBuffer(
-            downloaded.buffer,
-            req.user.encryption_key,
-            file.id,
-            chunk.chunk_index,
-            chunk.iv,
-            chunk.auth_tag,
-            chunk.crypto_version !== undefined ? chunk.crypto_version : 2
-          );
-          cacheManager.set(file.id, chunkPlain, chunk.chunk_index);
-        }
-        decryptedParts.push(chunkPlain);
-      }
-      cachedBuffer = Buffer.concat(decryptedParts);
-      cacheManager.set(file.id, cachedBuffer);
+    if (!chunks || chunks.length === 0 || !Number.isSafeInteger(totalSize) || totalSize <= 0) {
+      return res.status(404).send('No streamable file chunks found');
     }
 
+    // Discord attachments are served from a CDN and are noticeably faster for
+    // interactive media preview. Use them when a completed replica exists;
+    // downloadChunkWithFailover still falls back to the file's other replica.
+    const hasDiscordReplicas = chunks.every(chunk =>
+      (chunk.replicas || []).some(replica => replica.provider === 'discord' && replica.status === 'completed')
+    );
+    const streamPreferredProvider = hasDiscordReplicas ? 'discord' : file.primary_provider;
+
+    // Do not assemble the entire decrypted video in RAM before responding. A
+    // media element normally asks for only a byte range, so fetch/decrypt just
+    // the chunks that overlap that range and start sending as soon as possible.
+    let start = 0;
+    let end = totalSize - 1;
+    let statusCode = 200;
     if (rangeHeader) {
-      const parts = rangeHeader.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
-      const chunkSize = end - start + 1;
-
-      res.writeHead(206, {
-        'Content-Range': `bytes ${start}-${end}/${totalSize}`,
-        'Accept-Ranges': 'bytes',
-        'Content-Length': chunkSize,
-        'Content-Type': mimeType
-      });
-      res.end(cachedBuffer.subarray(start, end + 1));
-    } else {
-      res.writeHead(200, {
-        'Content-Length': totalSize,
-        'Content-Type': mimeType,
-        'Accept-Ranges': 'bytes'
-      });
-      res.end(cachedBuffer);
+      const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
+      if (!match) {
+        res.setHeader('Content-Range', `bytes */${totalSize}`);
+        return res.status(416).end();
+      }
+      if (match[1] === '' && match[2] !== '') {
+        const suffixLength = Number(match[2]);
+        start = Math.max(0, totalSize - suffixLength);
+      } else {
+        start = Number(match[1]);
+        end = match[2] === '' ? totalSize - 1 : Math.min(Number(match[2]), totalSize - 1);
+      }
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start >= totalSize || end < start) {
+        res.setHeader('Content-Range', `bytes */${totalSize}`);
+        return res.status(416).end();
+      }
+      statusCode = 206;
     }
+
+    const contentLength = end - start + 1;
+    const responseHeaders = {
+      'Accept-Ranges': 'bytes',
+      'Content-Length': contentLength,
+      'Content-Type': mimeType
+    };
+    if (statusCode === 206) responseHeaders['Content-Range'] = `bytes ${start}-${end}/${totalSize}`;
+    res.writeHead(statusCode, responseHeaders);
+
+    const getDecryptedChunk = async (chunk) => {
+      let plain = cacheManager.get(file.id, chunk.chunk_index);
+      if (plain) return plain;
+
+      const candidates = (chunk.replicas || [])
+        .filter(replica => replica.status === 'completed')
+        .sort((a, b) => (a.provider === streamPreferredProvider ? -1 : 0) - (b.provider === streamPreferredProvider ? -1 : 0));
+      if (candidates.length === 0) throw new Error(`No completed replicas for stream chunk ${chunk.chunk_index}`);
+
+      // Preview is latency-sensitive. A stale replica should not hold the
+      // browser hostage while another completed replica is available.
+      const downloaded = candidates.length === 1
+        ? await storageManager.downloadChunkWithFailover(candidates, streamPreferredProvider)
+        : await Promise.any(candidates.map(async replica => {
+          const provider = storageManager.getProvider(replica.provider);
+          if (!provider.isInitialized) await provider.initialize();
+          return {
+            buffer: await provider.downloadChunk(replica.remote_id),
+            provider: replica.provider
+          };
+        }));
+      plain = cryptoModule.decryptChunkBuffer(
+        downloaded.buffer,
+        req.user.encryption_key,
+        file.id,
+        chunk.chunk_index,
+        chunk.iv,
+        chunk.auth_tag,
+        chunk.crypto_version !== undefined ? chunk.crypto_version : 2
+      );
+      cacheManager.set(file.id, plain, chunk.chunk_index);
+      return plain;
+    };
+
+    const streamUnencryptedChunk = async (chunk, replica, from, to) => {
+      const provider = storageManager.getProvider(replica.provider);
+      if (typeof provider.iterDownloadChunk !== 'function') return false;
+      if (!provider.isInitialized) await provider.initialize();
+
+      let remoteOffset = 0;
+      for await (const remotePart of provider.iterDownloadChunk(replica.remote_id)) {
+        const partEnd = remoteOffset + remotePart.length - 1;
+        if (partEnd >= from && remoteOffset <= to) {
+          const partFrom = Math.max(0, from - remoteOffset);
+          const partTo = Math.min(remotePart.length - 1, to - remoteOffset);
+          if (partTo >= partFrom) await writeWithBackpressure(remotePart.subarray(partFrom, partTo + 1));
+        }
+        remoteOffset += remotePart.length;
+        if (remoteOffset > to || res.destroyed) break;
+      }
+      return true;
+    };
+
+    const writeWithBackpressure = (buffer) => {
+      if (res.write(buffer)) return Promise.resolve();
+      return new Promise(resolve => res.once('drain', resolve));
+    };
+
+    let chunkOffset = 0;
+    for (const chunk of chunks) {
+      const declaredChunkSize = Number(chunk.size);
+      if (!Number.isSafeInteger(declaredChunkSize) || declaredChunkSize <= 0) {
+        throw new Error(`Invalid size metadata for stream chunk ${chunk.chunk_index}`);
+      }
+      const chunkEnd = chunkOffset + declaredChunkSize - 1;
+      if (chunkEnd < start) {
+        chunkOffset += declaredChunkSize;
+        continue;
+      }
+      if (chunkOffset > end || res.destroyed) break;
+
+      const from = Math.max(0, start - chunkOffset);
+      const to = Math.min(declaredChunkSize - 1, end - chunkOffset);
+
+      // Unencrypted media can be sent directly from Telegram's iterator,
+      // allowing playback to begin before the complete chunk is buffered.
+      const rawReplica = file.encryption_enabled === 0
+        ? (chunk.replicas || []).find(replica => replica.provider === 'telegram' && replica.status === 'completed')
+        : null;
+      if (rawReplica && to >= from && await streamUnencryptedChunk(chunk, rawReplica, from, to)) {
+        chunkOffset += declaredChunkSize;
+        continue;
+      }
+
+      const plain = await getDecryptedChunk(chunk);
+      const plainTo = Math.min(plain.length - 1, end - chunkOffset);
+      if (plainTo >= from) await writeWithBackpressure(plain.subarray(from, plainTo + 1));
+      chunkOffset += declaredChunkSize;
+    }
+
+    if (!res.destroyed) res.end();
   } catch (err) {
     console.error(`[Files] Stream error for ${id}:`, err.message);
     if (!res.headersSent) res.status(500).send(`Stream error: ${err.message}`);
@@ -919,6 +1039,7 @@ router.get('/:id/thumbnail', async (req, res) => {
   const file = db.getFileById(id, req.user.id);
   if (!file) return res.status(404).send('File not found');
   if (!requireUnlockedFile(req, res, file)) return;
+  db.logAuditEvent({ userId: req.user.id, userEmail: req.user.email, action: 'FILE_VIEW', details: { fileId: file.id, fileName: file.name, access: 'thumbnail' }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
 
   const thumbJpg = path.join(config.THUMBNAILS_DIR, `${file.id}.jpg`);
   const thumbWebp = path.join(config.THUMBNAILS_DIR, `${file.id}.webp`);

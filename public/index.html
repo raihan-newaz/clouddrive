@@ -7,8 +7,8 @@
   <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
   <meta name="bingbot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
   <title>CloudDrive — Unlimited Secure Multi-Cloud Storage</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link rel="alternate icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260921_2">
+  <link rel="alternate icon" type="image/svg+xml" href="/favicon.svg?v=20260921_2">
   <!-- PWA Manifest & App Icons -->
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" id="app-theme-color" content="#ffffff">
@@ -22,13 +22,13 @@
   <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png?v=20260916">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png?v=20260916">
   <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png?v=20260916">
-  <!-- Google Fonts: Google Sans, Roboto, Inter, Noto Sans Bengali & Hind Siliguri (Full Bengali & Russian/Cyrillic support) -->
+  <!-- Typeface system: expressive headings, practical UI text, Bengali coverage and data values -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Google+Sans+Text:ital,wght@0,400;0,500;0,700;1,400&family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/themes.css?v=20260920_28">
-  <link rel="stylesheet" href="/css/styles.css?v=20260920_30">
-  <link rel="stylesheet" href="/css/responsive.css?v=20260920_26">
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/themes.css?v=20260921_29">
+    <link rel="stylesheet" href="/css/styles.css?v=20260921_42">
+  <link rel="stylesheet" href="/css/responsive.css?v=20260921_28">
   <script>
     (function() {
       try {
@@ -74,14 +74,14 @@
             </svg>
           </div>
           <h2>CloudDrive Setup Wizard</h2>
-          <p class="subtitle">Connect your personal Discord cloud storage (Unlimited file size, chunked & AES-256 encrypted)</p>
+          <p class="subtitle">Connect your private Telegram storage first, then optionally add Discord backup.</p>
         </div>
 
         <!-- Wizard Progress Bar -->
         <div class="wizard-progress">
-          <div class="step-node active" data-step="1"><span>1</span><label>Bot</label></div>
+          <div class="step-node active" data-step="1"><span>1</span><label>Telegram</label></div>
           <div class="step-line"></div>
-          <div class="step-node" data-step="2"><span>2</span><label>Channel</label></div>
+          <div class="step-node" data-step="2"><span>2</span><label>Discord</label></div>
           <div class="step-line"></div>
           <div class="step-node" data-step="3"><span>3</span><label>Security</label></div>
           <div class="step-line"></div>
@@ -89,46 +89,55 @@
         </div>
 
         <form id="setup-form" onsubmit="return false;">
-          <!-- STEP 1: BOT TOKEN & GUILD ID -->
+          <!-- STEP 1: TELEGRAM (REQUIRED) -->
           <div class="wizard-step" id="wizard-step-1">
             <div class="step-info-box">
-              <strong>Step 1: Discord Bot & Server Setup</strong>
-              <p>1. Open <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Discord Developer Portal</a> and select your Application.<br>
-              2. Go to <strong>Bot</strong> tab &rarr; click <strong>Reset Token</strong> to copy your Bot Token.<br>
-              3. Right-click your Discord server &rarr; click <strong>Copy Server ID</strong> (Guild ID).</p>
+              <strong><span class="flat-icon-label"><svg class="flat-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M19.35 10.04A7 7 0 0 0 5.4 8.04 6 6 0 0 0 6 20h13a5 5 0 0 0 .35-9.96z"/></svg> Step 1: Telegram Storage</span></strong>
+              <p>Telegram is required as the primary storage provider. Create a bot with BotFather, add it to a private channel, and give it permission to post messages.</p>
             </div>
             <div class="form-group">
-              <label for="setup-bot-token">Discord Bot Token <span class="req">*</span></label>
-              <input type="password" id="setup-bot-token" name="botToken" placeholder="e.g. MTIzNDU2Nzg...GaBcDe.xYz..." required autocomplete="off">
-              <small class="hint">Found in Discord Developer Portal &rarr; Bot &rarr; Reset Token</small>
+              <label for="setup-telegram-api-id">Telegram API ID <span class="req">*</span></label>
+              <input type="text" id="setup-telegram-api-id" placeholder="e.g. 12345678" required autocomplete="off">
             </div>
             <div class="form-group">
-              <label for="setup-guild-id">Discord Server (Guild) ID <span class="req">*</span></label>
-              <input type="text" id="setup-guild-id" name="guildId" placeholder="e.g. 123456789012345678" required autocomplete="off">
-              <small class="hint">Enable Developer Mode in Discord settings &rarr; Right-click server &rarr; Copy Server ID</small>
+              <label for="setup-telegram-api-hash">Telegram API Hash <span class="req">*</span></label>
+              <input type="password" id="setup-telegram-api-hash" placeholder="Your Telegram API hash" required autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="setup-telegram-bot-token">Telegram Bot Token <span class="req">*</span></label>
+              <input type="password" id="setup-telegram-bot-token" placeholder="123456789:ABC..." required autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="setup-telegram-channel-id">Telegram Channel ID <span class="req">*</span></label>
+              <input type="text" id="setup-telegram-channel-id" placeholder="e.g. -1001234567890" required autocomplete="off">
             </div>
             <div class="wizard-actions">
-              <div></div>
-              <button type="button" class="btn-primary" id="btn-step-1-next">Next →</button>
+              <button type="button" class="btn-secondary" id="btn-test-telegram">Test Telegram</button>
+              <button type="button" class="btn-primary" id="btn-step-1-next">Continue <span aria-hidden="true">→</span></button>
             </div>
           </div>
 
-          <!-- STEP 2: CHANNEL ID -->
+          <!-- STEP 2: DISCORD (OPTIONAL) -->
           <div class="wizard-step" id="wizard-step-2" style="display:none;">
             <div class="step-info-box">
-              <strong>Step 2: Private Storage Channel</strong>
-              <p>1. Create a <strong>Private Text Channel</strong> in your server (e.g. <em>#discorddrive-vault</em>).<br>
-              2. Invite your bot to the server and make sure it has permissions to <strong>Send Messages</strong> & <strong>Attach Files</strong> in that channel.<br>
-              3. Right-click the channel &rarr; click <strong>Copy Channel ID</strong>.</p>
+              <strong><span class="flat-icon-label"><svg class="flat-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M19.35 10.04A7 7 0 0 0 5.4 8.04 6 6 0 0 0 6 20h13a5 5 0 0 0 .35-9.96z"/></svg> Step 2: Discord Backup (Optional)</span></strong>
+              <p>You can skip this step and use Telegram only. Add Discord later from Settings whenever you need a second provider.</p>
             </div>
             <div class="form-group">
-              <label for="setup-channel-id">Discord Channel ID <span class="req">*</span></label>
-              <input type="text" id="setup-channel-id" name="channelId" placeholder="e.g. 123456789012345678" required autocomplete="off">
-              <small class="hint">Right-click the storage channel &rarr; Copy Channel ID</small>
+              <label for="setup-bot-token">Discord Bot Token</label>
+              <input type="password" id="setup-bot-token" placeholder="Optional Discord bot token" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="setup-guild-id">Discord Server ID</label>
+              <input type="text" id="setup-guild-id" placeholder="Optional server ID" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="setup-channel-id">Discord Channel ID</label>
+              <input type="text" id="setup-channel-id" placeholder="Optional channel ID" autocomplete="off">
             </div>
             <div class="wizard-actions">
-              <button type="button" class="btn-secondary" id="btn-step-2-prev">← Back</button>
-              <button type="button" class="btn-primary" id="btn-step-2-next">Next →</button>
+              <button type="button" class="btn-secondary" id="btn-step-2-prev"><span aria-hidden="true">←</span> Back</button>
+              <button type="button" class="btn-primary" id="btn-step-2-next">Continue <span aria-hidden="true">→</span></button>
             </div>
           </div>
 
@@ -136,7 +145,15 @@
           <div class="wizard-step" id="wizard-step-3" style="display:none;">
             <div class="step-info-box">
               <strong>Step 3: Master Security Passwords</strong>
-              <p>Your files will be encrypted using <strong>AES-256-GCM Zero-Knowledge Encryption</strong> before reaching Discord. Please choose a secure password.</p>
+              <p>Set the first administrator identity and security credentials. Your files will be encrypted using <strong>AES-256-GCM Zero-Knowledge Encryption</strong>.</p>
+            </div>
+            <div class="form-group">
+              <label for="setup-admin-name">Admin Name <span class="req">*</span></label>
+              <input type="text" id="setup-admin-name" placeholder="e.g. Raihan Newaz" required autocomplete="name">
+            </div>
+            <div class="form-group">
+              <label for="setup-admin-email">Admin Email <span class="req">*</span></label>
+              <input type="email" id="setup-admin-email" placeholder="you@example.com" required autocomplete="email">
             </div>
             <div class="form-group">
               <label for="setup-password">Master Login Password <span class="req">*</span></label>
@@ -156,16 +173,12 @@
           <!-- STEP 4: TEST & COMPLETE -->
           <div class="wizard-step" id="wizard-step-4" style="display:none;">
             <div class="step-info-box">
-              <strong>Step 4: Verify Connection & Launch</strong>
-              <p>Click "Test Connection" to check if the Bot can connect to Discord and access your channel.</p>
+              <strong>Step 4: Secure Setup & Launch</strong>
+              <p>Review your security details, then create the admin account and launch CloudDrive. Provider settings can be changed later.</p>
             </div>
             <div id="setup-test-status" class="test-status-box" style="display:none;"></div>
             <div class="wizard-actions">
               <button type="button" class="btn-secondary" id="btn-step-4-prev">← Back</button>
-              <button type="button" class="btn-secondary" id="btn-test-connection">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-                <span>Test Connection</span>
-              </button>
               <button type="button" class="btn-primary" id="btn-complete-setup">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
                 <span>Complete & Launch</span>
@@ -383,6 +396,9 @@
             </svg>
             <span>Settings</span>
           </a>
+          <a class="nav-item" id="sidebar-admin-center-link" data-view="admin-center" href="/admin-center" style="display:flex;" title="Admin Center">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2l8 4v6c0 5-3.4 9.7-8 11-4.6-1.3-8-6-8-11V6l8-4zm0 4.2L7 8.7v3.1c0 3.5 2.1 6.7 5 7.9 2.9-1.2 5-4.4 5-7.9V8.7l-5-2.5z"/></svg><span>Admin Center</span>
+          </a>
         </nav>
 
         <div class="sidebar-divider"></div>
@@ -403,6 +419,90 @@
 
       <!-- MAIN CONTENT AREA -->
       <main class="content" id="content">
+        <section id="admin-center-page" class="admin-center-page" style="display:none;">
+          <div class="admin-center-header">
+            <div><p class="admin-eyebrow">SYSTEM ADMINISTRATION</p><h1>Admin Center</h1><p>Monitor access, manage people, and respond to security activity from one place.</p></div>
+            <button class="btn-secondary" id="admin-refresh-dashboard">Refresh dashboard</button>
+          </div>
+          <nav class="admin-workspace-nav" aria-label="Admin Center sections">
+            <button type="button" class="active" data-admin-workspace="overview"><span>Overview</span><small>System status</small></button>
+            <button type="button" data-admin-workspace="operations"><span>Operations</span><small>Alerts &amp; devices</small></button>
+            <button type="button" data-admin-workspace="activity"><span>Activity &amp; IP</span><small>Logs &amp; access rules</small></button>
+            <button type="button" data-admin-workspace="settings"><span>Settings</span><small>Users &amp; services</small></button>
+          </nav>
+          <section class="admin-workspace active" data-admin-workspace-panel="overview">
+          <div class="admin-stat-grid" aria-label="System overview">
+            <div class="admin-stat"><span>Active users</span><strong id="admin-stat-users">—</strong><small id="admin-stat-users-detail">Loading</small></div>
+            <div class="admin-stat"><span>Files in drive</span><strong id="admin-stat-files">—</strong><small id="admin-stat-storage">Loading</small></div>
+            <div class="admin-stat"><span>Security events, 24h</span><strong id="admin-stat-events">—</strong><small>Login, shares, files &amp; WebDAV</small></div>
+            <div class="admin-stat admin-stat-alert"><span>Blocked IPs</span><strong id="admin-stat-blocked">—</strong><small>Access denied across all entry points</small></div>
+          </div>
+          <div class="admin-action-grid">
+            <button class="admin-action" id="admin-open-users"><strong>Manage users</strong><span>Create accounts, roles, quota, and status.</span></button>
+            <button class="admin-action" id="admin-open-security"><strong>Security &amp; recovery</strong><span>Encryption, backups, and recovery controls.</span></button>
+            <button class="admin-action" id="admin-open-settings"><strong>Providers &amp; network drive</strong><span>Cloud provider and WebDAV configuration.</span></button>
+          </div>
+          </section>
+          <section class="admin-workspace" data-admin-workspace-panel="operations">
+          <div class="admin-dashboard-grid">
+            <section class="settings-section admin-operations-card">
+              <div class="admin-section-header admin-operations-heading"><div class="admin-heading-with-icon"><span class="admin-heading-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 5.5V11c0 5.2 3.4 9.9 8 11 4.6-1.1 8-5.8 8-11V5.5L12 2Z"/><path d="M9 12l2 2 4-5"/></svg></span><div><h3>Operations control</h3><p>Keep the service secure and route critical alerts.</p></div></div><span class="admin-live-badge"><i></i> Live</span></div>
+              <div class="admin-maintenance-row"><div><strong>Maintenance mode</strong><span>Allow only administrators while work is in progress.</span></div><label class="admin-switch" aria-label="Toggle maintenance mode"><input type="checkbox" id="admin-maintenance-mode"><span></span></label></div>
+              <form id="admin-notification-form" class="admin-notification-form">
+                <div class="admin-notification-topline"><div><strong>Security alerts</strong><span>Upload, backup and suspicious login events.</span></div><label class="admin-switch" aria-label="Enable security alerts"><input type="checkbox" id="admin-alerts-enabled"><span></span></label></div>
+                <div class="admin-channel-grid">
+                  <label class="admin-channel"><span class="admin-channel-copy"><b>Telegram</b><small>Instant message</small></span><span class="admin-switch admin-switch-sm"><input type="checkbox" id="admin-alert-telegram"><span></span></span></label>
+                  <label class="admin-channel"><span class="admin-channel-copy"><b>Discord</b><small>Channel alert</small></span><span class="admin-switch admin-switch-sm"><input type="checkbox" id="admin-alert-discord"><span></span></span></label>
+                  <label class="admin-channel"><span class="admin-channel-copy"><b>Email</b><small>SMTP delivery</small></span><span class="admin-switch admin-switch-sm"><input type="checkbox" id="admin-alert-email"><span></span></span></label>
+                </div>
+                <div class="admin-alert-actions"><input id="admin-alert-email-to" class="settings-input" type="email" placeholder="Alert email recipient"><div><button class="btn-primary" type="submit">Save changes</button><button class="btn-secondary" type="button" id="admin-test-alert">Send test</button></div></div>
+              </form>
+              <small id="admin-notification-status" class="admin-operations-note">Loading alert configuration…</small>
+            </section>
+            <aside class="settings-section admin-ip-card">
+              <div class="admin-section-header"><div><h3>Active devices</h3><p>Browser and WebDAV sessions observed since server start.</p></div></div>
+              <div id="admin-device-sessions"><span class="hint">Loading devices…</span></div>
+            </aside>
+          </div>
+          </section>
+          <section class="admin-workspace" data-admin-workspace-panel="activity">
+          <aside class="settings-section admin-ip-card admin-ip-control-bar">
+            <div class="admin-section-header"><div><h3>IP access control</h3><p>Block an address immediately across login, shares, downloads, and WebDAV.</p></div><div id="admin-blocked-ips" class="admin-blocked-inline"><span class="hint">Loading blocked IPs…</span></div></div>
+            <form id="admin-block-ip-form" class="admin-block-form admin-block-form-inline">
+              <input id="admin-block-ip" class="settings-input" required placeholder="IP address">
+              <input id="admin-block-reason" class="settings-input" maxlength="200" placeholder="Reason (optional)">
+              <button class="btn-danger" type="submit">Block IP</button>
+            </form>
+          </aside>
+          <div class="admin-dashboard-grid admin-activity-layout">
+            <div class="settings-section admin-audit-card">
+              <div class="admin-section-header"><div><h3>Access activity</h3><p>Login, shared-link, file-view and download events.</p></div><span id="admin-audit-total" class="badge-count">—</span></div>
+              <div class="admin-filter-grid">
+                <input id="admin-audit-search" class="settings-input" placeholder="Search user, file, IP, action or browser">
+                <input id="admin-audit-user" class="settings-input" placeholder="User or email">
+                <input id="admin-audit-file" class="settings-input" placeholder="File name or ID">
+                <input id="admin-audit-ip" class="settings-input" placeholder="IP address">
+                <select id="admin-audit-action" class="settings-select"><option value="">All actions</option><option value="LOGIN_SUCCESS">Successful login</option><option value="LOGIN_FAILED">Failed login</option><option value="LOGIN_BLOCKED_IP">Blocked login</option><option value="SHARE_VIEW">Share opened</option><option value="SHARE_FILE_VIEW">Shared file viewed</option><option value="SHARE_FILE_DOWNLOAD">Shared file downloaded</option><option value="FILE_VIEW">Private file viewed</option><option value="FILE_DOWNLOAD">Private file downloaded</option><option value="WEBDAV_BLOCKED_IP">Blocked WebDAV</option></select>
+              </div>
+              <div id="admin-center-audit" class="table-responsive"><span class="hint">Loading activity…</span></div>
+            </div>
+          </div>
+          </section>
+          <section class="admin-workspace" data-admin-workspace-panel="settings">
+          <section class="settings-section admin-settings-shell" aria-labelledby="admin-settings-title">
+            <div class="admin-section-header"><div><h3 id="admin-settings-title">Administrative controls</h3><p>All administrator-only settings are managed here.</p></div></div>
+            <nav class="admin-section-nav" aria-label="Administrative settings">
+              <button type="button" data-admin-section="pane-users">Users</button>
+              <button type="button" data-admin-section="pane-security">Security</button>
+              <button type="button" data-admin-section="pane-discord">Discord</button>
+              <button type="button" data-admin-section="pane-telegram">Telegram</button>
+              <button type="button" data-admin-section="pane-backup">Backup &amp; recovery</button>
+              <button type="button" data-admin-section="pane-webdav">Network drive</button>
+            </nav>
+            <div id="admin-settings-host" class="admin-settings-host"></div>
+          </section>
+          </section>
+        </section>
         <!-- BREADCRUMB -->
         <div class="breadcrumb" id="breadcrumb">
           <a class="breadcrumb-item" data-folder-id="" href="#">My Drive</a>
@@ -1315,13 +1415,13 @@
       </div>
     </div>
 
-    <!-- TAB: USERS & FAMILY (Admin Only) -->
+    <!-- TAB: ADMIN CENTER (Admin Only) -->
     <div class="settings-tab-pane" id="pane-users" style="display:none;">
       <div class="settings-section">
         <div class="settings-section-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
           <div>
-            <h4>User & Family Accounts</h4>
-            <p>Manage members, assign storage quotas, and control tenant permissions</p>
+            <h4>Admin Center</h4>
+            <p>Centralized administration: users, security activity, IP blocking, provider controls and recovery tools.</p>
           </div>
           <button type="button" class="btn-primary" id="btn-open-create-user" style="display: inline-flex; align-items: center; gap: 6px;">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
@@ -1945,6 +2045,11 @@
           <h4>Export Database Backup (Local)</h4>
           <p>Download a complete backup of your file indexes, folders hierarchy, and encryption metadata.</p>
         </div>
+        <div class="settings-section admin-security-shortcut">
+          <div class="admin-security-shortcut-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 5.5V11c0 5.2 3.4 9.9 8 11 4.6-1.1 8-5.8 8-11V5.5L12 2Z"/><path d="M8 12h8M8 16h5"/></svg></div>
+          <div><h4>Security activity &amp; IP rules</h4><p>Search access events, review browser/IP details, and block or unblock addresses from one focused workspace.</p></div>
+          <button type="button" class="btn-primary" data-admin-workspace-target="activity">Open Activity &amp; IP</button>
+        </div>
         <div class="cache-action-box">
           <div>
             <strong>Download SQLite Database</strong>
@@ -1972,6 +2077,17 @@
               <span>Restore Backup File</span>
             </button>
           </div>
+        </div>
+        <div class="cache-action-box" style="margin-top: 12px; border-color: rgba(234, 67, 53, 0.35);">
+          <div>
+            <strong>Disaster Recovery Bundle</strong>
+            <p>One-click admin export containing the database, provider configuration, and encryption metadata needed for offline recovery. Store it in an encrypted offline location.</p>
+          </div>
+          <button type="button" id="btn-download-recovery-bundle" class="btn-danger" style="display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7V3zm1 0v6h6v2h-8V3h2z"/></svg>
+            <span>Download Recovery Bundle</span>
+          </button>
+          <button type="button" id="btn-purge-telegram-known" class="btn-danger" style="display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;">Delete Telegram Uploads</button>
         </div>
       </div>
     </div>
@@ -2038,7 +2154,8 @@
           <div class="form-row-2">
             <div class="form-group">
               <label for="webdav-username">WebDAV Username <span class="req">*</span></label>
-              <input type="text" id="webdav-username" placeholder="admin" required autocomplete="off">
+              <input type="text" id="webdav-username" placeholder="my-webdav-user" required autocomplete="off">
+              <small class="hint">Separate from your CloudDrive email.</small>
             </div>
             <div class="form-group">
               <label for="webdav-password">WebDAV Password</label>
@@ -2050,6 +2167,10 @@
               </div>
               <small id="webdav-pw-hint" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px; display: block;">Leave empty to keep existing password, or enter a new password to update.</small>
             </div>
+          </div>
+          <div class="pref-row" style="margin-top: 14px; display:flex; gap:12px; align-items:center; justify-content:space-between; padding: 12px 14px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-hover);">
+            <div class="pref-info"><strong>My WebDAV access</strong><span>Turn off only your own network-drive access. This does not affect other users.</span></div>
+            <label class="toggle-switch" title="Enable or disable my WebDAV access"><input type="checkbox" id="webdav-user-enabled" checked><span class="toggle-slider"></span></label>
           </div>
           <div class="settings-actions" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
             <button type="button" class="btn-primary" id="btn-save-webdav">
@@ -2546,11 +2667,11 @@
   <!-- Core Scripts in order -->
   <script src="/js/api.js?v=20260919_58"></script>
   <script src="/js/ui.js?v=20260920_59"></script>
-  <script src="/js/upload.js?v=20260920_59"></script>
-  <script src="/js/preview.js?v=20260921_59"></script>
-  <script src="/js/setup.js?v=20260920_59"></script>
+  <script src="/js/upload.js?v=20260921_60"></script>
+  <script src="/js/preview.js?v=20260921_60"></script>
+  <script src="/js/setup.js?v=20260921_61"></script>
   <script src="/js/pwa.js?v=20260920_59"></script>
-    <script src="/js/app.js?v=20260921_65"></script>
+    <script src="/js/app.js?v=20260921_72"></script>
 </body>
 </html>
 

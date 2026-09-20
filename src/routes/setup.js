@@ -8,6 +8,7 @@ const db = require('../db');
 const cryptoModule = require('../crypto');
 const config = require('../config');
 const storageManager = require('../storage/StorageManager');
+const { authLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
 
@@ -145,7 +146,7 @@ router.post('/test-telegram', requireSetupOrAdmin, async (req, res) => {
 });
 
 // Run First-Time Setup Wizard
-router.post('/init', async (req, res) => {
+router.post('/init', authLimiter, async (req, res) => {
   if (global.__cloudDriveSetupInProgress) return res.status(409).json({ error: 'Setup is already in progress' });
   const users = db.getAllUsers();
   if (users.length > 0) {
@@ -172,12 +173,13 @@ router.post('/init', async (req, res) => {
   } = req.body;
 
   const effectivePassword = adminPassword || masterPassword;
-  const effectiveEmail = (adminEmail || 'admin@clouddrive.local').toLowerCase().trim();
-  const effectiveName = (adminName || 'Admin').trim();
+  const effectiveEmail = String(adminEmail || '').toLowerCase().trim();
+  const effectiveName = String(adminName || '').trim();
 
-  if (!effectivePassword) {
-    return res.status(400).json({ error: 'Password is required' });
+  if (!effectivePassword || !effectiveEmail || !effectiveName) {
+    return res.status(400).json({ error: 'Admin name, email, and password are required' });
   }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(effectiveEmail) || effectiveEmail.length > 254 || effectiveName.length < 2 || effectiveName.length > 100) return res.status(400).json({ error: 'Enter a valid admin name and email address' });
 
   const complexity = cryptoModule.validatePasswordComplexity(effectivePassword);
   if (!complexity.valid) {

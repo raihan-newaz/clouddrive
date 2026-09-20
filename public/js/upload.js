@@ -77,6 +77,10 @@ const UploadManager = {
    */
   toggleMinimize() {
     this.isMinimized = !this.isMinimized;
+    const widget = document.getElementById('upload-status-widget');
+    // Update the existing panel immediately. Rebuilding the widget while an
+    // upload callback is finishing used to swallow the click on mobile.
+    if (widget) widget.classList.toggle('minimized', this.isMinimized);
     this.renderUploadWidget();
   },
 
@@ -459,9 +463,11 @@ const UploadManager = {
       };
 
       this.queue.push(uploadItem);
-      this.renderUploadWidget();
     }
 
+    // Render once after the complete selection is queued. Rendering inside the
+    // loop caused the panel to jump/reflow repeatedly for large selections.
+    this.renderUploadWidget();
     this.processQueue();
   },
 
@@ -957,6 +963,31 @@ const UploadManager = {
       document.body.appendChild(widget);
     }
 
+    // Bind once through delegation because this widget is frequently re-rendered.
+    // Inline onclick attributes are blocked by the app's Content-Security-Policy.
+    if (widget.dataset.eventsBound !== 'true') {
+      widget.addEventListener('click', (event) => {
+        const toggle = event.target.closest('[data-upload-widget-toggle]');
+        if (toggle) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.toggleMinimize();
+          return;
+        }
+        const close = event.target.closest('[data-upload-widget-close]');
+        if (close) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.clearCompleted();
+          return;
+        }
+        if (event.target.closest('[data-upload-widget-header]')) {
+          this.toggleMinimize();
+        }
+      });
+      widget.dataset.eventsBound = 'true';
+    }
+
     if (this.queue.length === 0) {
       widget.style.display = 'none';
       return;
@@ -1103,7 +1134,7 @@ const UploadManager = {
     }
 
     let html = `
-      <div class="upload-widget-header" onclick="UploadManager.toggleMinimize()" title="Click to ${this.isMinimized ? 'expand' : 'minimize'}">
+      <div class="upload-widget-header" data-upload-widget-header title="Click to ${this.isMinimized ? 'expand' : 'minimize'}">
         <div class="upload-widget-title-area">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="flex-shrink:0; opacity:0.85;">
             <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
@@ -1111,10 +1142,10 @@ const UploadManager = {
           <span class="upload-widget-title-text">${headerTitle}</span>
         </div>
         <div class="upload-widget-actions">
-          <button class="upload-widget-btn upload-widget-toggle" onclick="event.stopPropagation(); UploadManager.toggleMinimize()" title="${this.isMinimized ? 'Expand panel' : 'Minimize panel'}" aria-label="Toggle panel">
+          <button type="button" class="upload-widget-btn upload-widget-toggle" data-upload-widget-toggle title="${this.isMinimized ? 'Expand panel' : 'Minimize panel'}" aria-label="Toggle panel">
             ${minimizeIcon}
           </button>
-          <button class="upload-widget-btn upload-widget-close" onclick="event.stopPropagation(); UploadManager.clearCompleted()" title="Clear Completed / Close" aria-label="Close">
+          <button type="button" class="upload-widget-btn upload-widget-close" data-upload-widget-close title="Clear Completed / Close" aria-label="Close">
             ${UI.icon('close', 15)}
           </button>
         </div>
@@ -1214,6 +1245,14 @@ const UploadManager = {
 
   clearCompleted() {
     this.queue = this.queue.filter(q => q.status !== 'completed' && q.status !== 'error');
+    if (this.queue.length === 0) {
+      if (this._renderThrottleTimer) { clearTimeout(this._renderThrottleTimer); this._renderThrottleTimer = null; }
+      if (this._renderScheduled) this._renderScheduled = false;
+      const widget = document.getElementById('upload-status-widget');
+      if (widget) widget.remove();
+      this.isMinimized = false;
+      return;
+    }
     this.renderUploadWidget();
   },
 

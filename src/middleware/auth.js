@@ -1,8 +1,10 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config');
 const db = require('../db');
+const sessionTracker = require('../services/sessionTracker');
 
 function authMiddleware(req, res, next) {
+  if (db.isIpBlocked && db.isIpBlocked(req.ip)) return res.status(403).json({ error: 'Access denied from this IP address' });
   // Allow token from Authorization header or cookie
   let token = null;
   const authHeader = req.headers['authorization'];
@@ -33,8 +35,13 @@ function authMiddleware(req, res, next) {
     if (Number(decoded.tokenVersion) !== Number(user.token_version || 1)) {
       return res.status(401).json({ error: 'Session has been invalidated. Please log in again.' });
     }
+    if (sessionTracker.isBrowserSessionRevoked(decoded.sid)) {
+      return res.status(401).json({ error: 'This device session has been revoked. Please log in again.' });
+    }
 
     req.user = user;
+    req.authSessionId = decoded.sid || null;
+    sessionTracker.track(user.id, req, decoded.sid);
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired authentication token' });

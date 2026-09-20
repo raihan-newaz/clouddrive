@@ -7,6 +7,7 @@ class SessionTracker {
   constructor() {
     this.sessions = new Map();
     this.activeSessions = new Map();
+    this.browserSessions = new Map();
     this.revokedSessionIds = new Set();
   }
 
@@ -84,7 +85,7 @@ class SessionTracker {
   /**
    * Track User Login Session
    */
-  track(userId, req) {
+  track(userId, req, sessionId = null) {
     if (!userId) return;
     const ip = this.getClientIp(req);
     const userAgent = req.headers['user-agent'] || 'Unknown';
@@ -93,6 +94,26 @@ class SessionTracker {
       userAgent,
       lastSeen: Date.now()
     });
+    if (sessionId && this.browserSessions.has(sessionId)) {
+      const session = this.browserSessions.get(sessionId);
+      session.lastActive = Date.now();
+      session.ip = ip;
+      session.userAgent = userAgent;
+    }
+  }
+
+  createBrowserSession(user, req, sessionId = crypto.randomUUID()) {
+    const ip = this.getClientIp(req);
+    const userAgent = req.headers['user-agent'] || 'Unknown browser';
+    const parsed = this.parseDevice(userAgent);
+    this.browserSessions.set(sessionId, {
+      id: sessionId, type: 'browser', userId: user.id, username: user.email,
+      ip, userAgent, clientName: parsed.clientName, osType: parsed.osType,
+      connectedAt: new Date().toISOString(), lastActive: Date.now(),
+      lastAction: 'Signed in', requestCount: 1, revoked: false
+    });
+    this.track(user.id, req, sessionId);
+    return sessionId;
   }
 
   getActiveSession(userId) {
@@ -166,6 +187,8 @@ class SessionTracker {
     if (session) {
       session.revoked = true;
     }
+    const browserSession = this.browserSessions.get(sessionId);
+    if (browserSession) browserSession.revoked = true;
     return true;
   }
 
@@ -188,7 +211,7 @@ class SessionTracker {
     const now = Date.now();
     const ONLINE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
-    const list = Array.from(this.sessions.values()).map(s => {
+    const list = [...this.sessions.values(), ...this.browserSessions.values()].map(s => {
       const isOnline = (now - s.lastActive) < ONLINE_THRESHOLD_MS && !s.revoked;
       return {
         ...s,
@@ -205,6 +228,10 @@ class SessionTracker {
     });
 
     return list;
+  }
+
+  isBrowserSessionRevoked(sessionId) {
+    return Boolean(sessionId && (this.revokedSessionIds.has(sessionId) || this.browserSessions.get(sessionId)?.revoked));
   }
 
   /**

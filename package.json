@@ -21,6 +21,7 @@
     "input": "^1.0.1",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.4.0",
+    "nodemailer": "^10.0.10",
     "sql.js": "^1.11.0",
     "telegram": "^2.26.8",
     "uuid": "^11.1.1"

@@ -3,12 +3,14 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const authMiddleware = require('../middleware/auth');
+const { notifySecurityEvent } = require('../services/notificationService');
 const remoteDownloader = require('../services/remoteDownloader');
 const gdriveCrawler = require('../services/gdriveCrawler');
 const storageManager = require('../storage/StorageManager');
 const db = require('../db');
 const cryptoModule = require('../crypto');
 const config = require('../config');
+const { verifyFolderToken } = require('../securityTokens');
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -21,6 +23,7 @@ router.post('/', async (req, res) => {
   let targetUrl = url.trim();
   let fileName = 'downloaded_file';
 
+  let tempPath = null;
   try {
     if (targetUrl.includes('drive.google.com')) {
       const gdrive = await gdriveCrawler.crawlPublicGdriveUrl(targetUrl);
@@ -31,15 +34,19 @@ router.post('/', async (req, res) => {
       fileName = path.basename(urlObj.pathname) || 'remote_file';
     }
 
-    const tempPath = path.join(config.TMP_DIR, `${uuidv4()}_${fileName}`);
+    tempPath = path.join(config.TMP_DIR, `${uuidv4()}_${fileName}`);
     const downloadResult = await remoteDownloader.downloadRemoteUrl(targetUrl, tempPath);
 
     const stats = fs.statSync(tempPath);
     const fileId = uuidv4();
     const mode = storageMode || req.user.default_storage_mode || config.DEFAULT_STORAGE_MODE;
     if (!['discord', 'telegram', 'dual'].includes(mode)) throw new Error('Invalid storage mode');
-    if (folderId && folderId !== 'null' && folderId !== 'root' && !db.getFolderById(folderId, req.user.id)) {
-      throw new Error('Folder not found');
+    if (folderId && folderId !== 'null' && folderId !== 'root') {
+      const folder = db.getFolderById(folderId, req.user.id);
+      if (!folder) throw new Error('Folder not found');
+      if ((folder.is_locked || folder.password_hash) && !verifyFolderToken(folder.id, req.user.id, req.headers['x-folder-token'] || req.query.folderToken)) {
+        return res.status(403).json({ error: 'Folder password verification required' });
+      }
     }
     const preferred = db.getSetting('primary_provider', req.user.id) || config.PRIMARY_PROVIDER || 'telegram';
     const primary = mode === 'discord' || mode === 'telegram' ? mode : preferred;
@@ -117,15 +124,16 @@ router.post('/', async (req, res) => {
       status: 'completed'
     });
 
-    fs.unlinkSync(tempPath);
-
     res.json({
       success: true,
       file: db.getFileById(fileId, req.user.id)
     });
   } catch (err) {
     console.error('[RemoteUpload] Error:', err.message);
+    notifySecurityEvent('Remote upload failure', { user: req.user.email, ip: req.ip, error: err.message });
     res.status(500).json({ error: `Remote upload failed: ${err.message}` });
+  } finally {
+    if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
   }
 });
 
