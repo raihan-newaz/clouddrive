@@ -209,9 +209,9 @@ class TelegramStorageProvider extends StorageProvider {
       });
 
       const isEncrypted = fileName && fileName.endsWith('.enc');
-      const caption = isEncrypted
-        ? `CloudDrive encrypted payload: ${fileName}`
-        : `CloudDrive payload: ${fileName}`;
+      // Keep storage-channel messages compact: the filename already identifies
+      // the payload and encryption is reflected by the .enc extension.
+      const caption = isEncrypted ? `Encrypted · ${fileName}` : fileName;
 
       const message = await this.client.sendFile(channel, {
         file: fileHandle,

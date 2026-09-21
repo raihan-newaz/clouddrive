@@ -207,9 +207,9 @@ class DiscordStorageProvider extends StorageProvider {
       const attachment = new AttachmentBuilder(fileSource, { name: fileName });
 
       const isEncrypted = fileName && fileName.endsWith('.enc');
-      const content = isEncrypted
-        ? `CloudDrive encrypted payload: ${fileName}`
-        : `CloudDrive payload: ${fileName}`;
+      // Keep storage-channel messages compact: the filename already identifies
+      // the payload and encryption is reflected by the .enc extension.
+      const content = isEncrypted ? `Encrypted · ${fileName}` : fileName;
 
       const message = await channel.send({
         content,
