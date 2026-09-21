@@ -1409,18 +1409,6 @@ function getStorageStats(userId = null) {
   };
 }
 
-function getUserDetailedStorageStats(userId) {
-  return getStorageStats(userId);
-}
-
-function getUserStorageBreakdown(userId) {
-  return getStorageStats(userId);
-}
-
-function getUserLargestFiles(userId, limit = 5) {
-  return all('SELECT * FROM files WHERE user_id = ? AND is_trashed = 0 ORDER BY size DESC LIMIT ?', [userId, limit]);
-}
-
 // ─── Security, Lockout & Audit Logging ──────────────────────────────────────
 
 function recordFailedLogin(userId) {

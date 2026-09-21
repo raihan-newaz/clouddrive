@@ -689,6 +689,8 @@ const App = {
           `;
           catList.appendChild(card);
         }
+      } else if (catList) {
+        catList.innerHTML = '<div style="grid-column: 1 / -1; padding: 14px; text-align: center; color: var(--text-secondary); font-size: 12.5px;">Could not load storage breakdown. Please try again.</div>';
       }
 
       // Render Largest Files
