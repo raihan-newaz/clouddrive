@@ -15,7 +15,11 @@ class CacheManager {
       try {
         if (fs.existsSync(config.THUMBNAILS_DIR)) {
           for (const file of fs.readdirSync(config.THUMBNAILS_DIR)) {
-            try { fs.unlinkSync(path.join(config.THUMBNAILS_DIR, file)); } catch (_) {}
+            // Legacy thumbnails were plaintext image files. Encrypted .thumb
+            // and .thumb.json pairs are safe to retain across restarts.
+            if (/\.(jpe?g|png|webp)$/i.test(file)) {
+              try { fs.unlinkSync(path.join(config.THUMBNAILS_DIR, file)); } catch (_) {}
+            }
           }
         }
       } catch (_) {}

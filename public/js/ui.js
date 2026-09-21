@@ -969,6 +969,7 @@ const UI = {
       if (cached && typeof cached === 'string' && cached.startsWith('data:image') && cached.length > 300) {
         imgEl.src = cached;
         imgEl.style.display = 'block';
+        this.syncCachedVideoThumbnail(file.id, cached);
         this._activeThumbnailWorkers--;
         continue;
       }
@@ -1040,10 +1041,8 @@ const UI = {
               } catch(e) {
                 try { sessionStorage.setItem(`vthumb_${file.id}`, dataUrl); } catch(e2) {}
               }
-              // Upload to server so all devices/sessions get this thumbnail permanently
-              if (typeof API !== 'undefined' && API.uploadThumbnail) {
-                API.uploadThumbnail(file.id, dataUrl);
-              }
+              // Upload to server so all devices/sessions get this thumbnail permanently.
+              this.syncCachedVideoThumbnail(file.id, dataUrl);
               clearTimeout(timeoutId);
               done();
               return true;
@@ -1091,9 +1090,7 @@ const UI = {
         } catch(e) {
           try { sessionStorage.setItem(`vthumb_${fileId}`, dataUrl); } catch(e2) {}
         }
-        if (typeof API !== 'undefined' && API.uploadThumbnail) {
-          API.uploadThumbnail(fileId, dataUrl);
-        }
+        this.syncCachedVideoThumbnail(fileId, dataUrl);
       }
     }).catch(() => {});
   },
@@ -1128,6 +1125,7 @@ const UI = {
       if (cached && typeof cached === 'string' && cached.startsWith('data:image') && cached.length > 500) {
         imgEl.src = cached;
         imgEl.style.display = 'block';
+        this.syncCachedVideoThumbnail(file.id, cached);
         return;
       }
 
@@ -1148,6 +1146,19 @@ const UI = {
         }
       }
     });
+  },
+
+  syncCachedVideoThumbnail(fileId, dataUrl) {
+    const syncKey = `vthumb_server_v2_${fileId}`;
+    try {
+      if (localStorage.getItem(syncKey)) return;
+    } catch (e) {}
+    if (typeof API === 'undefined' || !API.uploadThumbnail) return;
+    API.uploadThumbnail(fileId, dataUrl).then(result => {
+      if (result && result.success) {
+        try { localStorage.setItem(syncKey, '1'); } catch (e) {}
+      }
+    }).catch(() => {});
   },
 
   async copyToClipboard(text, fallbackInputEl = null) {

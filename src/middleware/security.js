@@ -14,7 +14,8 @@ function securityMiddleware() {
         connectSrc: ["'self'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
-        frameAncestors: ["'none'"]
+        // File previews use a same-origin iframe. External sites remain blocked.
+        frameAncestors: ["'self'"]
       }
     },
     crossOriginEmbedderPolicy: false

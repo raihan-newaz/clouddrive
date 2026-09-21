@@ -1044,20 +1044,51 @@ router.get('/:id/thumbnail', async (req, res) => {
   const thumbJpg = path.join(config.THUMBNAILS_DIR, `${file.id}.jpg`);
   const thumbWebp = path.join(config.THUMBNAILS_DIR, `${file.id}.webp`);
   const thumbPng = path.join(config.THUMBNAILS_DIR, `${file.id}.png`);
+  const encryptedThumb = path.join(config.THUMBNAILS_DIR, `${file.id}.thumb`);
+  const encryptedThumbMeta = path.join(config.THUMBNAILS_DIR, `${file.id}.thumb.json`);
+  const setThumbnailCacheHeaders = () => {
+    // Thumbnails are account-scoped; shared proxies must not reuse them across
+    // signed-in users, but a browser can safely cache its own preview.
+    res.setHeader('Cache-Control', 'private, max-age=86400, stale-while-revalidate=604800');
+    res.setHeader('Vary', 'Cookie');
+  };
+
+  // Video previews are generated in the uploader's browser. Persist them
+  // encrypted at rest so every device on the same account sees the result,
+  // without enabling the plaintext file cache.
+  if (fs.existsSync(encryptedThumb) && fs.existsSync(encryptedThumbMeta)) {
+    try {
+      const metadata = JSON.parse(fs.readFileSync(encryptedThumbMeta, 'utf8'));
+      const thumbnail = cryptoModule.decryptChunkBuffer(
+        fs.readFileSync(encryptedThumb),
+        req.user.encryption_key,
+        `thumbnail:${file.id}`,
+        0,
+        metadata.iv,
+        metadata.authTag,
+        metadata.cryptoVersion
+      );
+      res.setHeader('Content-Type', metadata.contentType || 'image/jpeg');
+      setThumbnailCacheHeaders();
+      return res.end(thumbnail);
+    } catch (err) {
+      console.warn(`[Files] Encrypted thumbnail read failed for ${id}:`, err.message);
+    }
+  }
 
   if (cacheManager.enabled && fs.existsSync(thumbJpg)) {
     res.setHeader('Content-Type', 'image/jpeg');
-    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+    setThumbnailCacheHeaders();
     return fs.createReadStream(thumbJpg).pipe(res);
   }
   if (cacheManager.enabled && fs.existsSync(thumbWebp)) {
     res.setHeader('Content-Type', 'image/webp');
-    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+    setThumbnailCacheHeaders();
     return fs.createReadStream(thumbWebp).pipe(res);
   }
   if (cacheManager.enabled && fs.existsSync(thumbPng)) {
     res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+    setThumbnailCacheHeaders();
     return fs.createReadStream(thumbPng).pipe(res);
   }
 
@@ -1102,7 +1133,7 @@ router.get('/:id/thumbnail', async (req, res) => {
 
       if (cached) {
         res.setHeader('Content-Type', file.mime_type || 'image/jpeg');
-        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+        setThumbnailCacheHeaders();
         return res.end(cached);
       }
     } catch (err) {
@@ -1117,11 +1148,12 @@ router.get('/:id/thumbnail', async (req, res) => {
 router.post('/:id/thumbnail', async (req, res) => {
   const { id } = req.params;
   const { thumbnail } = req.body;
-  if (!thumbnail) return res.status(400).json({ error: 'Thumbnail base64 is required' });
+  if (!thumbnail || typeof thumbnail !== 'string') {
+    return res.status(400).json({ error: 'Thumbnail base64 is required' });
+  }
 
   const file = db.getFileById(id, req.user.id);
   if (!file) return res.status(404).json({ error: 'File not found' });
-  if (!cacheManager.enabled) return res.status(403).json({ error: 'Plaintext thumbnail cache is disabled' });
 
   try {
     if (!fs.existsSync(config.THUMBNAILS_DIR)) {
@@ -1130,14 +1162,36 @@ router.post('/:id/thumbnail', async (req, res) => {
 
     const matches = thumbnail.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
     let buffer;
+    let contentType = 'image/jpeg';
     if (matches && matches.length === 3) {
+      contentType = matches[1].toLowerCase();
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(contentType)) {
+        return res.status(400).json({ error: 'Thumbnail must be a JPEG, PNG, or WebP image' });
+      }
       buffer = Buffer.from(matches[2], 'base64');
     } else {
       buffer = Buffer.from(thumbnail, 'base64');
     }
+    if (buffer.length === 0 || buffer.length > 2 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Thumbnail must be between 1 byte and 2 MB' });
+    }
 
-    const thumbPath = path.join(config.THUMBNAILS_DIR, `${file.id}.jpg`);
-    fs.writeFileSync(thumbPath, buffer);
+    const encrypted = cryptoModule.encryptChunkBuffer(
+      buffer,
+      req.user.encryption_key,
+      `thumbnail:${file.id}`,
+      0,
+      true
+    );
+    const thumbPath = path.join(config.THUMBNAILS_DIR, `${file.id}.thumb`);
+    const thumbMetaPath = path.join(config.THUMBNAILS_DIR, `${file.id}.thumb.json`);
+    fs.writeFileSync(thumbPath, encrypted.ciphertext);
+    fs.writeFileSync(thumbMetaPath, JSON.stringify({
+      contentType,
+      iv: encrypted.iv,
+      authTag: encrypted.authTag,
+      cryptoVersion: encrypted.crypto_version
+    }));
 
     res.json({ success: true, thumbnail: `/api/files/${file.id}/thumbnail` });
   } catch (err) {
