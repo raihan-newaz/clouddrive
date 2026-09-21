@@ -147,9 +147,9 @@
               <strong>Step 3: Master Security Passwords</strong>
               <p>Set the first administrator identity and security credentials. Your files will be encrypted using <strong>AES-256-GCM Zero-Knowledge Encryption</strong>.</p>
             </div>
-            <div class="form-group">
-              <label for="setup-admin-name">Admin Name <span class="req">*</span></label>
-              <input type="text" id="setup-admin-name" placeholder="e.g. Raihan Newaz" required autocomplete="name">
+            <div class="form-row-2">
+              <div class="form-group"><label for="setup-admin-first-name">First Name <span class="req">*</span></label><input type="text" id="setup-admin-first-name" placeholder="e.g. Raihan" required autocomplete="given-name"></div>
+              <div class="form-group"><label for="setup-admin-last-name">Last Name</label><input type="text" id="setup-admin-last-name" placeholder="e.g. Newaz" autocomplete="family-name"></div>
             </div>
             <div class="form-group">
               <label for="setup-admin-email">Admin Email <span class="req">*</span></label>
@@ -1333,10 +1333,8 @@
 
         <form id="form-update-profile" onsubmit="return false;">
           <div class="form-row-2">
-            <div class="form-group">
-              <label for="profile-name-input">Display Name</label>
-              <input type="text" id="profile-name-input" placeholder="Your Name" autocomplete="name">
-            </div>
+            <div class="form-group"><label for="profile-first-name-input">First Name <span class="req">*</span></label><input type="text" id="profile-first-name-input" placeholder="First name" autocomplete="given-name"></div>
+            <div class="form-group"><label for="profile-last-name-input">Last Name</label><input type="text" id="profile-last-name-input" placeholder="Last name" autocomplete="family-name"></div>
             <div class="form-group">
               <label for="profile-email-input">Email Address <span class="req">*</span></label>
               <input type="email" id="profile-email-input" placeholder="you@example.com" required autocomplete="email">
@@ -2454,10 +2452,8 @@
           <label for="create-user-email">Email Address <span class="req">*</span></label>
           <input type="email" id="create-user-email" placeholder="e.g. member@discorddrive.local" required autocomplete="off">
         </div>
-        <div class="form-group">
-          <label for="create-user-name">Full Name</label>
-          <input type="text" id="create-user-name" placeholder="e.g. Raihan Newaz" autocomplete="off">
-        </div>
+        <div class="form-group"><label for="create-user-first-name">First Name <span class="req">*</span></label><input type="text" id="create-user-first-name" placeholder="e.g. Raihan" autocomplete="given-name"></div>
+        <div class="form-group"><label for="create-user-last-name">Last Name</label><input type="text" id="create-user-last-name" placeholder="e.g. Newaz" autocomplete="family-name"></div>
       </div>
 
       <div class="form-row-2">
@@ -2521,10 +2517,8 @@
     <form id="form-edit-user" onsubmit="return false;">
       <input type="hidden" id="edit-user-id">
       <div class="form-row-2">
-        <div class="form-group">
-          <label for="edit-user-name">Full Name</label>
-          <input type="text" id="edit-user-name" placeholder="Full Name" autocomplete="off">
-        </div>
+        <div class="form-group"><label for="edit-user-first-name">First Name <span class="req">*</span></label><input type="text" id="edit-user-first-name" placeholder="First name" autocomplete="given-name"></div>
+        <div class="form-group"><label for="edit-user-last-name">Last Name</label><input type="text" id="edit-user-last-name" placeholder="Last name" autocomplete="family-name"></div>
         <div class="form-group">
           <label for="edit-user-role">Account Role</label>
           <select id="edit-user-role" class="settings-select">
@@ -2669,9 +2663,9 @@
   <script src="/js/ui.js?v=20260921_62"></script>
   <script src="/js/upload.js?v=20260921_60"></script>
   <script src="/js/preview.js?v=20260921_63"></script>
-  <script src="/js/setup.js?v=20260921_61"></script>
+  <script src="/js/setup.js?v=20260921_74"></script>
   <script src="/js/pwa.js?v=20260920_59"></script>
-    <script src="/js/app.js?v=20260921_73"></script>
+    <script src="/js/app.js?v=20260921_74"></script>
 </body>
 </html>
 

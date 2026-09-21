@@ -159,7 +159,7 @@ router.post('/init', authLimiter, async (req, res) => {
     adminEmail,
     adminPassword,
     masterPassword,
-    adminName,
+    adminName, adminFirstName, adminLastName,
     discordBotToken,
     discordChannelId,
     discordGuildId,
@@ -174,10 +174,12 @@ router.post('/init', authLimiter, async (req, res) => {
 
   const effectivePassword = adminPassword || masterPassword;
   const effectiveEmail = String(adminEmail || '').toLowerCase().trim();
-  const effectiveName = String(adminName || '').trim();
+  const effectiveFirstName = String(adminFirstName || '').trim();
+  const effectiveLastName = String(adminLastName || '').trim();
+  const effectiveName = [effectiveFirstName, effectiveLastName].filter(Boolean).join(' ') || String(adminName || '').trim();
 
-  if (!effectivePassword || !effectiveEmail || !effectiveName) {
-    return res.status(400).json({ error: 'Admin name, email, and password are required' });
+  if (!effectivePassword || !effectiveEmail || !effectiveFirstName) {
+    return res.status(400).json({ error: 'Admin first name, email, and password are required' });
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(effectiveEmail) || effectiveEmail.length > 254 || effectiveName.length < 2 || effectiveName.length > 100) return res.status(400).json({ error: 'Enter a valid admin name and email address' });
 
@@ -195,6 +197,8 @@ router.post('/init', authLimiter, async (req, res) => {
     email: effectiveEmail,
     password_hash: passwordHash,
     name: effectiveName,
+    first_name: effectiveFirstName || effectiveName.split(/\s+/)[0],
+    last_name: effectiveLastName || effectiveName.split(/\s+/).slice(1).join(' '),
     role: 'admin',
     status: 'active',
     encryption_key: encryptionKey,

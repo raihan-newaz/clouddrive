@@ -94,14 +94,14 @@ const Setup = {
     const btnStep3Next = document.getElementById('btn-step-3-next');
     if (btnStep3Next) {
       btnStep3Next.onclick = () => {
-        const adminName = (document.getElementById('setup-admin-name')?.value || '').trim();
+        const adminFirstName = (document.getElementById('setup-admin-first-name')?.value || '').trim();
         const adminEmail = (document.getElementById('setup-admin-email')?.value || '').trim().toLowerCase();
         const password = (document.getElementById('setup-password')?.value || '').trim();
         const key = (document.getElementById('setup-key')?.value || '').trim();
 
-        if (!adminName || adminName.length < 2) {
-          UI.showToast('Please enter the admin name', 'error');
-          document.getElementById('setup-admin-name')?.focus();
+        if (!adminFirstName) {
+          UI.showToast('Please enter the admin first name', 'error');
+          document.getElementById('setup-admin-first-name')?.focus();
           return;
         }
         if (!adminEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
@@ -177,7 +177,7 @@ const Setup = {
     setTimeout(() => {
       if (step === 1) document.getElementById('setup-telegram-api-id')?.focus();
       if (step === 2) document.getElementById('setup-bot-token')?.focus();
-      if (step === 3) document.getElementById('setup-admin-name')?.focus();
+      if (step === 3) document.getElementById('setup-admin-first-name')?.focus();
     }, 100);
   },
 
@@ -276,12 +276,14 @@ const Setup = {
     const telegramChannelId = (document.getElementById('setup-telegram-channel-id')?.value || '').trim();
     const password = (document.getElementById('setup-password')?.value || '').trim();
     const key = (document.getElementById('setup-key')?.value || '').trim();
-    const adminName = (document.getElementById('setup-admin-name')?.value || '').trim();
+    const adminFirstName = (document.getElementById('setup-admin-first-name')?.value || '').trim();
+    const adminLastName = (document.getElementById('setup-admin-last-name')?.value || '').trim();
     const adminEmail = (document.getElementById('setup-admin-email')?.value || '').trim().toLowerCase();
 
     const payload = {
       adminEmail,
-      adminName,
+      adminFirstName,
+      adminLastName,
       adminPassword: password,
       masterPassword: password,
       encryptionKey: key,

@@ -4046,7 +4046,8 @@ const App = {
     const btnSaveProfile = document.getElementById('btn-save-profile');
     if (btnSaveProfile) {
       btnSaveProfile.onclick = async () => {
-        const name = document.getElementById('profile-name-input')?.value.trim() || '';
+        const firstName = document.getElementById('profile-first-name-input')?.value.trim() || '';
+        const lastName = document.getElementById('profile-last-name-input')?.value.trim() || '';
         const email = document.getElementById('profile-email-input')?.value.trim() || '';
         const filePrefix = document.getElementById('profile-prefix-input')?.value.trim() || '';
 
@@ -4059,7 +4060,7 @@ const App = {
         btnSaveProfile.innerHTML = '<span>Saving...</span>';
 
         try {
-          const res = await API.updateProfile({ name, email, filePrefix });
+          const res = await API.updateProfile({ firstName, lastName, email, filePrefix });
           if (res?.user) {
             this.user = res.user;
             const emailDisp = document.getElementById('profile-email-display');
@@ -4080,14 +4081,16 @@ const App = {
     if (btnOpenCreateUser) {
       btnOpenCreateUser.onclick = () => {
         const emailInp = document.getElementById('create-user-email');
-        const nameInp = document.getElementById('create-user-name');
+        const firstNameInp = document.getElementById('create-user-first-name');
+        const lastNameInp = document.getElementById('create-user-last-name');
         const pwInp = document.getElementById('create-user-password');
         const roleSel = document.getElementById('create-user-role');
         const quotaInp = document.getElementById('create-user-quota');
         const prefixInp = document.getElementById('create-user-prefix');
 
         if (emailInp) emailInp.value = '';
-        if (nameInp) nameInp.value = '';
+        if (firstNameInp) firstNameInp.value = '';
+        if (lastNameInp) lastNameInp.value = '';
         if (pwInp) pwInp.value = '';
         if (roleSel) roleSel.value = 'user';
         if (quotaInp) quotaInp.value = '0';
@@ -4103,15 +4106,16 @@ const App = {
     if (btnSubmitCreateUser) {
       btnSubmitCreateUser.onclick = async () => {
         const email = document.getElementById('create-user-email')?.value.trim() || '';
-        const name = document.getElementById('create-user-name')?.value.trim() || '';
+        const firstName = document.getElementById('create-user-first-name')?.value.trim() || '';
+        const lastName = document.getElementById('create-user-last-name')?.value.trim() || '';
         const password = document.getElementById('create-user-password')?.value || '';
         const role = document.getElementById('create-user-role')?.value || 'user';
         const quotaGB = parseFloat(document.getElementById('create-user-quota')?.value) || 0;
         const filePrefix = document.getElementById('create-user-prefix')?.value.trim() || '';
         const storageLimit = Math.round(quotaGB * 1024 * 1024 * 1024);
 
-        if (!email || !password) {
-          UI.showToast('Email and initial password are required', 'warning');
+        if (!email || !firstName || !password) {
+          UI.showToast('Email, first name, and initial password are required', 'warning');
           return;
         }
         if (password.length < 6) {
@@ -4123,7 +4127,7 @@ const App = {
         btnSubmitCreateUser.innerHTML = '<span>Creating...</span>';
 
         try {
-          await API.createAdminUser({ email, name, password, role, storageLimit, filePrefix });
+          await API.createAdminUser({ email, firstName, lastName, password, role, storageLimit, filePrefix });
           UI.showToast(`User ${email} created successfully!`, 'success');
           UI.hideModal('create-user-modal');
           await this.loadAdminUsers();
@@ -4141,7 +4145,8 @@ const App = {
     if (btnSubmitEditUser) {
       btnSubmitEditUser.onclick = async () => {
         const id = document.getElementById('edit-user-id')?.value;
-        const name = document.getElementById('edit-user-name')?.value.trim() || '';
+        const firstName = document.getElementById('edit-user-first-name')?.value.trim() || '';
+        const lastName = document.getElementById('edit-user-last-name')?.value.trim() || '';
         const role = document.getElementById('edit-user-role')?.value || 'user';
         const status = document.getElementById('edit-user-status')?.value || 'active';
         const quotaGB = parseFloat(document.getElementById('edit-user-quota')?.value) || 0;
@@ -4154,7 +4159,7 @@ const App = {
         btnSubmitEditUser.innerHTML = '<span>Saving...</span>';
 
         try {
-          await API.updateAdminUser(id, { name, role, status, storageLimit, filePrefix });
+          await API.updateAdminUser(id, { firstName, lastName, role, status, storageLimit, filePrefix });
           UI.showToast('User updated successfully!', 'success');
           UI.hideModal('edit-user-modal');
           await this.loadAdminUsers();
@@ -5296,7 +5301,8 @@ const App = {
       const emailDisp = document.getElementById('profile-email-display');
       const roleBadge = document.getElementById('profile-role-badge');
       const storageText = document.getElementById('profile-storage-text');
-      const nameInput = document.getElementById('profile-name-input');
+      const firstNameInput = document.getElementById('profile-first-name-input');
+      const lastNameInput = document.getElementById('profile-last-name-input');
       const emailInput = document.getElementById('profile-email-input');
       const prefixInput = document.getElementById('profile-prefix-input');
 
@@ -5310,7 +5316,8 @@ const App = {
         const limit = this.user.storage_limit > 0 ? UI.formatFileSize(this.user.storage_limit) : 'Unlimited';
         storageText.textContent = `${used} / ${limit}`;
       }
-      if (nameInput) nameInput.value = this.user.name || '';
+      if (firstNameInput) firstNameInput.value = this.user.first_name || this.user.firstName || (this.user.name || '').split(/\s+/)[0] || '';
+      if (lastNameInput) lastNameInput.value = this.user.last_name || this.user.lastName || (this.user.name || '').split(/\s+/).slice(1).join(' ');
       if (emailInput) emailInput.value = this.user.email || '';
       if (prefixInput) prefixInput.value = this.user.file_prefix || this.user.filePrefix || '';
       const userKeyInp = document.getElementById('settings-user-enc-key');
@@ -5710,7 +5717,8 @@ const App = {
 
   openEditUserModal(user) {
     const idInp = document.getElementById('edit-user-id');
-    const nameInp = document.getElementById('edit-user-name');
+    const firstNameInp = document.getElementById('edit-user-first-name');
+    const lastNameInp = document.getElementById('edit-user-last-name');
     const roleSel = document.getElementById('edit-user-role');
     const statusSel = document.getElementById('edit-user-status');
     const quotaInp = document.getElementById('edit-user-quota');
@@ -5719,7 +5727,8 @@ const App = {
     const subEl = document.getElementById('edit-user-modal-sub');
 
     if (idInp) idInp.value = user.id;
-    if (nameInp) nameInp.value = user.name || '';
+    if (firstNameInp) firstNameInp.value = user.first_name || user.firstName || (user.name || '').split(/\s+/)[0] || '';
+    if (lastNameInp) lastNameInp.value = user.last_name || user.lastName || (user.name || '').split(/\s+/).slice(1).join(' ');
     if (roleSel) roleSel.value = user.role || 'user';
     if (statusSel) statusSel.value = user.status || 'active';
     if (quotaInp) quotaInp.value = user.storage_limit > 0 ? (user.storage_limit / (1024 * 1024 * 1024)).toFixed(1) : 0;

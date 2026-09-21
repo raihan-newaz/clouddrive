@@ -32,6 +32,8 @@ async function initialize() {
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       name TEXT NOT NULL,
+      first_name TEXT,
+      last_name TEXT,
       role TEXT NOT NULL DEFAULT 'user',
       status TEXT NOT NULL DEFAULT 'active',
       encryption_key TEXT NOT NULL,
@@ -251,6 +253,22 @@ async function initialize() {
   try { db.run('ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 1;'); } catch (e) {}
   try { db.run('ALTER TABLE users ADD COLUMN file_prefix TEXT DEFAULT NULL;'); } catch (e) {}
   try { db.run('ALTER TABLE users ADD COLUMN default_storage_mode TEXT DEFAULT "dual";'); } catch (e) {}
+  try { db.run('ALTER TABLE users ADD COLUMN first_name TEXT;'); } catch (e) {}
+  try { db.run('ALTER TABLE users ADD COLUMN last_name TEXT;'); } catch (e) {}
+  try {
+    db.run(`
+      UPDATE users
+      SET first_name = CASE
+            WHEN INSTR(TRIM(name), ' ') > 0 THEN SUBSTR(TRIM(name), 1, INSTR(TRIM(name), ' ') - 1)
+            ELSE TRIM(name)
+          END,
+          last_name = CASE
+            WHEN INSTR(TRIM(name), ' ') > 0 THEN TRIM(SUBSTR(TRIM(name), INSTR(TRIM(name), ' ') + 1))
+            ELSE ''
+          END
+      WHERE first_name IS NULL OR TRIM(first_name) = '';
+    `);
+  } catch (e) {}
   try { db.run('ALTER TABLE folders ADD COLUMN is_trashed INTEGER DEFAULT 0;'); } catch (e) {}
   try { db.run('ALTER TABLE folders ADD COLUMN trashed_at DATETIME DEFAULT NULL;'); } catch (e) {}
   try { db.run('CREATE INDEX IF NOT EXISTS idx_folders_user_trashed ON folders(user_id, is_trashed);'); } catch (e) {}
@@ -307,21 +325,23 @@ function all(sql, params = []) {
 
 function createUser(user) {
   const sql = `
-    INSERT INTO users (id, email, password_hash, name, role, status, encryption_key, storage_limit, storage_used, file_prefix, default_storage_mode)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO users (id, email, password_hash, name, role, status, encryption_key, storage_limit, storage_used, file_prefix, default_storage_mode, first_name, last_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
   run(sql, [
     user.id,
     user.email,
     user.password_hash,
-    user.name,
+    user.name || [user.first_name || user.firstName, user.last_name || user.lastName].filter(Boolean).join(' '),
     user.role || 'user',
     user.status || 'active',
     user.encryption_key,
     user.storage_limit || 0,
     user.storage_used || 0,
     user.file_prefix || null,
-    user.default_storage_mode || 'dual'
+    user.default_storage_mode || 'dual',
+    user.first_name || user.firstName || null,
+    user.last_name || user.lastName || null
   ]);
   return getUserById(user.id);
 }
@@ -335,7 +355,7 @@ function getUserById(id) {
 }
 
 function getAllUsers() {
-  return all('SELECT id, email, name, role, status, storage_limit, storage_used, file_prefix, default_storage_mode, last_login_at, created_at, updated_at FROM users ORDER BY created_at ASC');
+  return all('SELECT id, email, name, first_name, last_name, role, status, storage_limit, storage_used, file_prefix, default_storage_mode, last_login_at, created_at, updated_at FROM users ORDER BY created_at ASC');
 }
 
 function updateUser(id, updates) {

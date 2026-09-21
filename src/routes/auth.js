@@ -18,6 +18,17 @@ function safeUser(user) {
   return safe;
 }
 
+function normalizeNameParts(firstName, lastName, legacyName = '') {
+  let first = String(firstName || '').trim();
+  let last = String(lastName || '').trim();
+  if (!first && legacyName) {
+    const parts = String(legacyName).trim().split(/\s+/);
+    first = parts.shift() || '';
+    last = parts.join(' ');
+  }
+  return { first, last, name: [first, last].filter(Boolean).join(' ') };
+}
+
 // Register (first user becomes admin)
 router.post('/register', authLimiter, async (req, res) => {
   return res.status(403).json({
@@ -130,6 +141,8 @@ router.post('/login', authLimiter, async (req, res) => {
       id: user.id,
       email: user.email,
       name: user.name,
+      first_name: user.first_name || '', firstName: user.first_name || '',
+      last_name: user.last_name || '', lastName: user.last_name || '',
       role: user.role,
       status: user.status,
       file_prefix: user.file_prefix,
@@ -171,6 +184,8 @@ router.get('/verify', authMiddleware, (req, res) => {
       id: req.user.id,
       email: req.user.email,
       name: req.user.name,
+      first_name: req.user.first_name || '', firstName: req.user.first_name || '',
+      last_name: req.user.last_name || '', lastName: req.user.last_name || '',
       role: req.user.role,
       status: req.user.status,
       storageLimit: req.user.storage_limit || 0,
@@ -215,6 +230,8 @@ router.get('/me', authMiddleware, (req, res) => {
       id: req.user.id,
       email: req.user.email,
       name: req.user.name,
+      first_name: req.user.first_name || '', firstName: req.user.first_name || '',
+      last_name: req.user.last_name || '', lastName: req.user.last_name || '',
       role: req.user.role,
       status: req.user.status,
       storage_limit: req.user.storage_limit || 0,
@@ -247,12 +264,14 @@ router.get('/me', authMiddleware, (req, res) => {
 
 // Update Profile
 router.put('/profile', authMiddleware, async (req, res) => {
-  const { name, email, filePrefix, file_prefix, default_storage_mode, defaultStorageMode } = req.body;
+  const { name, firstName, first_name, lastName, last_name, email, filePrefix, file_prefix, default_storage_mode, defaultStorageMode } = req.body;
   const updates = {};
-  if (name !== undefined) {
-    const cleanName = String(name).trim();
-    if (cleanName.length < 2 || cleanName.length > 100) return res.status(400).json({ error: 'Name must be between 2 and 100 characters' });
-    updates.name = cleanName;
+  if (firstName !== undefined || first_name !== undefined || lastName !== undefined || last_name !== undefined || name !== undefined) {
+    const parts = normalizeNameParts(firstName !== undefined ? firstName : first_name, lastName !== undefined ? lastName : last_name, name || req.user.name);
+    if (parts.first.length < 1 || parts.first.length > 50 || parts.last.length > 100 || parts.name.length > 150) return res.status(400).json({ error: 'First name is required and both names must be valid' });
+    updates.first_name = parts.first;
+    updates.last_name = parts.last;
+    updates.name = parts.name;
   }
   if (email !== undefined) {
     const cleanEmail = String(email).toLowerCase().trim();

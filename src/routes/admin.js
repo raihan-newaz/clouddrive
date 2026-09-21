@@ -100,9 +100,12 @@ router.get('/users', (req, res) => {
 
 // Create new user (by Admin)
 router.post('/users', async (req, res) => {
-  const { email, name, password, role, storageLimit, filePrefix, default_storage_mode } = req.body;
-  if (!email || !password || !name) {
-    return res.status(400).json({ error: 'Email, name, and password are required' });
+  const { email, firstName, first_name, lastName, last_name, name, password, role, storageLimit, filePrefix, default_storage_mode } = req.body;
+  const first = String(firstName !== undefined ? firstName : first_name || '').trim();
+  const last = String(lastName !== undefined ? lastName : last_name || '').trim();
+  const displayName = [first, last].filter(Boolean).join(' ') || String(name || '').trim();
+  if (!email || !password || !first) {
+    return res.status(400).json({ error: 'Email, first name, and password are required' });
   }
 
   const complexity = cryptoModule.validatePasswordComplexity(password);
@@ -122,7 +125,9 @@ router.post('/users', async (req, res) => {
     id: uuidv4(),
     email: email.toLowerCase().trim(),
     password_hash: passwordHash,
-    name: name.trim(),
+    name: displayName,
+    first_name: first,
+    last_name: last,
     role: role || 'user',
     status: 'active',
     encryption_key: encryptionKey,
@@ -151,13 +156,21 @@ router.post('/users', async (req, res) => {
 // Edit user account
 router.put('/users/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, role, status, storageLimit, filePrefix, default_storage_mode } = req.body;
+  const { firstName, first_name, lastName, last_name, name, role, status, storageLimit, filePrefix, default_storage_mode } = req.body;
 
   const target = db.getUserById(id);
   if (!target) return res.status(404).json({ error: 'User not found' });
 
   const updates = {};
-  if (name !== undefined) updates.name = name.trim();
+  if (firstName !== undefined || first_name !== undefined || lastName !== undefined || last_name !== undefined || name !== undefined) {
+    const first = String(firstName !== undefined ? firstName : first_name !== undefined ? first_name : target.first_name || '').trim();
+    const last = String(lastName !== undefined ? lastName : last_name !== undefined ? last_name : target.last_name || '').trim();
+    const displayName = [first, last].filter(Boolean).join(' ') || String(name || target.name || '').trim();
+    if (!first) return res.status(400).json({ error: 'First name is required' });
+    updates.first_name = first;
+    updates.last_name = last;
+    updates.name = displayName;
+  }
   if (role !== undefined) updates.role = role;
   if (status !== undefined) updates.status = status;
   if (storageLimit !== undefined) updates.storage_limit = parseStorageLimit(storageLimit);
