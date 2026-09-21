@@ -617,6 +617,8 @@ const Preview = {
       }
       if (playerWrap?.requestFullscreen) {
         try {
+          playerWrap.style.removeProperty('width');
+          playerWrap.style.removeProperty('height');
           await playerWrap.requestFullscreen();
           if (screen.orientation?.lock) {
             try { await screen.orientation.lock('landscape'); } catch (e) {}
@@ -626,6 +628,37 @@ const Preview = {
       }
       return false;
     };
+
+    // Fit the actual video aspect ratio into the preview's visible area. This
+    // keeps landscape, square, and portrait clips centered without pushing the
+    // controls below the mobile viewport.
+    const fitPlayerToPreview = () => {
+      if (!playerWrap || !video.videoWidth || !video.videoHeight || document.fullscreenElement === playerWrap) return;
+      const previewArea = playerWrap.closest('.preview-content');
+      if (!previewArea) return;
+
+      const aspectRatio = video.videoWidth / video.videoHeight;
+      const maxWidth = Math.min(previewArea.clientWidth, 1080);
+      const maxHeight = Math.max(1, previewArea.clientHeight);
+      if (!maxWidth || !maxHeight || !Number.isFinite(aspectRatio)) return;
+
+      let width = Math.min(maxWidth, maxHeight * aspectRatio);
+      let height = width / aspectRatio;
+      if (height > maxHeight) {
+        height = maxHeight;
+        width = height * aspectRatio;
+      }
+
+      playerWrap.style.setProperty('width', `${Math.floor(width)}px`, 'important');
+      playerWrap.style.setProperty('height', `${Math.floor(height)}px`, 'important');
+      playerWrap.style.setProperty('max-width', `${Math.floor(maxWidth)}px`, 'important');
+      playerWrap.style.setProperty('max-height', `${Math.floor(maxHeight)}px`, 'important');
+    };
+
+    this._addListener(window, 'resize', fitPlayerToPreview);
+    this._addListener(document, 'fullscreenchange', () => {
+      if (!document.fullscreenElement) fitPlayerToPreview();
+    });
 
     const exitPlayerFullscreen = async () => {
       if (document.fullscreenElement && document.exitFullscreen) {
@@ -665,6 +698,8 @@ const Preview = {
         } else {
           playerWrap.classList.remove('yt-player-vertical');
         }
+        playerWrap.classList.toggle('yt-player-square', Math.abs(video.videoWidth - video.videoHeight) <= 2);
+        requestAnimationFrame(fitPlayerToPreview);
       }
     });
 
