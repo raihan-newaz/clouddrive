@@ -512,7 +512,7 @@ const API = {
   getThumbnailUrl(fileId) {
     const url = this.buildMediaUrl(fileId, 'thumbnail');
     // Discard cached thumbnail 404s after another device has generated one.
-    return `${url}${url.includes('?') ? '&' : '?'}v=2`;
+    return `${url}${url.includes('?') ? '&' : '?'}v=3`;
   },
 
   getStreamUrl(fileId) {

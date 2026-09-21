@@ -3162,6 +3162,16 @@ body.dragging .drop-zone-content {
 }
 
 @media (max-width: 768px) {
+  /* Keep the player inside the visible preview area. In particular, a 9:16
+     clip must not make the overlay scroll past its controls on mobile. */
+  .preview-content:has(.yt-player-wrap) {
+    flex: 0 1 auto;
+    min-height: 0;
+    height: calc(100dvh - 52px);
+    padding: 0;
+    overflow: hidden;
+  }
+
   .yt-player-wrap {
     max-width: 100%;
     width: 100%;
@@ -3182,8 +3192,10 @@ body.dragging .drop-zone-content {
   .yt-player-wrap.yt-player-vertical {
     width: 100% !important;
     max-width: 100vw !important;
-    height: 100% !important;
-    max-height: calc(100dvh - 56px) !important;
+    height: calc(100dvh - 52px) !important;
+    max-height: calc(100dvh - 52px) !important;
+    min-height: 0 !important;
+    flex: 0 1 auto;
     aspect-ratio: unset !important;
     border-radius: 0 !important;
   }

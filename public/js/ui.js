@@ -981,7 +981,9 @@ const UI = {
       video.setAttribute('playsinline', '');
       video.setAttribute('webkit-playsinline', '');
       video.setAttribute('muted', '');
-      video.preload = 'metadata';
+      // Existing videos are read back from the cloud, unlike a just-uploaded
+      // local Blob. Let the browser fetch enough data to reach MP4 metadata.
+      video.preload = 'auto';
       video.style.cssText = 'position:fixed;bottom:0;right:0;width:320px;height:180px;opacity:0.001;pointer-events:none;z-index:-9999;clip:rect(0,0,0,0);';
       document.body.appendChild(video);
 
@@ -1001,7 +1003,10 @@ const UI = {
         this._processThumbnailQueue();
       };
 
-      const timeoutId = setTimeout(done, 6000); // 6s fast failover for remote video chunk load
+      // Remote providers can take longer than a local upload to return the
+      // first decodable frame. This is intentionally limited so scrolling a
+      // large library never leaves background thumbnail jobs running forever.
+      const timeoutId = setTimeout(done, 45000);
 
       const tryCapture = () => {
         if (finished) return false;
