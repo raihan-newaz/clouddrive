@@ -6904,25 +6904,33 @@ if (document.readyState === 'loading') {
 } else {
   App.init();
 }
-// Admin-protected recovery and Telegram cleanup actions.
-document.addEventListener('DOMContentLoaded', () => {
-  const adminCenterLink = document.getElementById('sidebar-admin-center-link');
-  if (adminCenterLink) adminCenterLink.addEventListener('click', async (event) => {
-    event.preventDefault();
-    if (!App.user || App.user.role !== 'admin') return;
-    await App.navigateToView('admin-center');
-  });
-  const download = document.getElementById('btn-download-recovery-bundle');
-  if (download) download.addEventListener('click', async () => {
+// Admin-protected recovery and Telegram cleanup actions. Delegation keeps these
+// controls live after PWA restores, cache updates, and client-side navigation.
+function initAdminRecoveryActions() {
+  if (document.documentElement.dataset.adminRecoveryActionsBound === 'true') return;
+  document.documentElement.dataset.adminRecoveryActionsBound = 'true';
+  document.addEventListener('click', async (event) => {
+    const adminCenterLink = event.target.closest('#sidebar-admin-center-link');
+    if (adminCenterLink) {
+      event.preventDefault();
+      if (!App.user || App.user.role !== 'admin') return;
+      await App.navigateToView('admin-center');
+      return;
+    }
+    const download = event.target.closest('#btn-download-recovery-bundle');
+    if (download) {
+      event.preventDefault();
     const password = window.prompt('Enter your admin password to download the recovery bundle:');
     if (!password) return;
     const response = await fetch('/api/settings/download-recovery-bundle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
     if (!response.ok) return window.alert((await response.json().catch(() => ({}))).error || 'Download failed');
     const blob = await response.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a');
     a.href = url; a.download = 'clouddrive-recovery-bundle.json'; a.click(); URL.revokeObjectURL(url);
-  });
-  const purge = document.getElementById('btn-purge-telegram-known');
-  if (purge) purge.addEventListener('click', async () => {
+      return;
+    }
+    const purge = event.target.closest('#btn-purge-telegram-known');
+    if (!purge) return;
+    event.preventDefault();
     const password = window.prompt('Admin password:'); if (!password) return;
     const confirmation = window.prompt('Type DELETE_ALL_TELEGRAM_MESSAGES to permanently delete CloudDrive Telegram uploads:');
     if (confirmation !== 'DELETE_ALL_TELEGRAM_MESSAGES') return window.alert('Cancelled. Nothing was deleted.');
@@ -6940,4 +6948,5 @@ document.addEventListener('DOMContentLoaded', () => {
       purge.textContent = originalLabel;
     }
   });
-});
+}
+initAdminRecoveryActions();
