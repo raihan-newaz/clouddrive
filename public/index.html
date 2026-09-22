@@ -27,7 +27,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/themes.css?v=20260921_29">
-  <link rel="stylesheet" href="/css/styles.css?v=20260923_64">
+  <link rel="stylesheet" href="/css/styles.css?v=20260923_65">
   <link rel="stylesheet" href="/css/responsive.css?v=20260921_28">
   <script>
     (function() {
@@ -422,7 +422,7 @@
         <section id="admin-center-page" class="admin-center-page" style="display:none;">
           <div class="admin-center-header">
             <div><p class="admin-eyebrow">SYSTEM ADMINISTRATION</p><h1>Admin Center</h1><p>Monitor access, manage people, and respond to security activity from one place.</p></div>
-            <button class="btn-secondary" id="admin-refresh-dashboard">Refresh dashboard</button>
+            <div class="admin-header-actions"><button class="btn-secondary" id="admin-refresh-ui-cache" title="Clear application cache and reload fresh UI files">Refresh site cache</button><button class="btn-secondary" id="admin-refresh-dashboard">Refresh dashboard</button></div>
           </div>
           <nav class="admin-workspace-nav" aria-label="Admin Center sections">
             <button type="button" class="active" data-admin-workspace="overview"><span>Overview</span><small>System status</small></button>
@@ -447,15 +447,15 @@
           <div class="admin-dashboard-grid">
             <section class="settings-section admin-operations-card">
               <div class="admin-section-header admin-operations-heading"><div class="admin-heading-with-icon"><span class="admin-heading-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 5.5V11c0 5.2 3.4 9.9 8 11 4.6-1.1 8-5.8 8-11V5.5L12 2Z"/><path d="M9 12l2 2 4-5"/></svg></span><div><h3>Operations control</h3><p>Keep the service secure and route critical alerts.</p></div></div><span class="admin-live-badge"><i></i> Live</span></div>
-              <div class="admin-maintenance-row"><div><strong>Maintenance mode</strong><span>Allow only administrators while work is in progress.</span></div><label class="admin-switch" aria-label="Toggle maintenance mode"><input type="checkbox" id="admin-maintenance-mode"><span></span></label></div>
+              <div class="admin-maintenance-row"><div><strong>Maintenance mode</strong><span>Non-admin visitors see the dedicated maintenance page; administrators retain access.</span></div><label class="admin-switch" aria-label="Toggle maintenance mode"><input type="checkbox" id="admin-maintenance-mode"><span></span></label></div>
               <form id="admin-notification-form" class="admin-notification-form">
-                <div class="admin-notification-topline"><div><strong>Security alerts</strong><span>Upload, backup and suspicious login events.</span></div><label class="admin-switch" aria-label="Enable security alerts"><input type="checkbox" id="admin-alerts-enabled"><span></span></label></div>
+                <div class="admin-notification-topline"><div><strong>Security alerts</strong><span>Receive a warning for failed uploads, backup failures, blocked/suspicious logins, and remote upload failures.</span></div><label class="admin-switch" aria-label="Enable security alerts"><input type="checkbox" id="admin-alerts-enabled"><span></span></label></div>
                 <div class="admin-channel-grid">
                   <label class="admin-channel"><span class="admin-channel-copy"><b>Telegram</b><small>Instant message</small></span><span class="admin-switch admin-switch-sm"><input type="checkbox" id="admin-alert-telegram"><span></span></span></label>
                   <label class="admin-channel"><span class="admin-channel-copy"><b>Discord</b><small>Channel alert</small></span><span class="admin-switch admin-switch-sm"><input type="checkbox" id="admin-alert-discord"><span></span></span></label>
                   <label class="admin-channel"><span class="admin-channel-copy"><b>Email</b><small>SMTP delivery</small></span><span class="admin-switch admin-switch-sm"><input type="checkbox" id="admin-alert-email"><span></span></span></label>
                 </div>
-                <div class="admin-alert-actions"><input id="admin-alert-email-to" class="settings-input" type="email" placeholder="Alert email recipient"><div><button class="btn-primary" type="submit">Save changes</button><button class="btn-secondary" type="button" id="admin-test-alert">Send test</button></div></div>
+                <div class="admin-alert-actions"><input id="admin-alert-email-to" class="settings-input" type="email" placeholder="Alert email recipient"><select id="admin-test-alert-channel" class="settings-select" aria-label="Test alert channel"><option value="telegram">Test Telegram</option><option value="discord">Test Discord</option><option value="email">Test email</option></select><div><button class="btn-primary" type="submit">Save changes</button><button class="btn-secondary" type="button" id="admin-test-alert">Send one test</button></div></div>
               </form>
               <small id="admin-notification-status" class="admin-operations-note">Loading alert configuration…</small>
             </section>
@@ -2665,7 +2665,7 @@
   <script src="/js/preview.js?v=20260921_63"></script>
   <script src="/js/setup.js?v=20260921_74"></script>
   <script src="/js/pwa.js?v=20260920_59"></script>
-    <script src="/js/app.js?v=20260923_76"></script>
+    <script src="/js/app.js?v=20260923_77"></script>
 </body>
 </html>
 

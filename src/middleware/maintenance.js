@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const path = require('path');
 const config = require('../config');
 const db = require('../db');
 const sessionTracker = require('../services/sessionTracker');
@@ -15,6 +16,6 @@ function maintenanceMode(req, res, next) {
     if (user?.role === 'admin' && Number(decoded.tokenVersion) === Number(user.token_version || 1) && !sessionTracker.isBrowserSessionRevoked(decoded.sid)) return next();
   } catch (_) { /* maintenance response below */ }
   if (req.path.startsWith('/api/')) return res.status(503).json({ error: 'Service is in maintenance mode. Administrator access only.' });
-  return res.status(503).send('Service is in maintenance mode. Administrator access only.');
+  return res.status(503).sendFile(path.join(__dirname, '../../public/maintenance.html'));
 }
 module.exports = maintenanceMode;

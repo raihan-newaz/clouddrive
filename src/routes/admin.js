@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const cryptoModule = require('../crypto');
+const cacheManager = require('../services/cacheManager');
 const authMiddleware = require('../middleware/auth');
 const { adminOnly } = require('../middleware/auth');
 const sessionTracker = require('../services/sessionTracker');
@@ -11,6 +12,7 @@ const { notifySecurityEvent } = require('../services/notificationService');
 const router = express.Router();
 router.use(authMiddleware);
 router.use(adminOnly);
+const recentTestAlerts = new Map();
 
 function safeUser(user) {
   if (!user) return null;
@@ -52,6 +54,17 @@ router.put('/maintenance', (req, res) => {
   res.json({ success: true, enabled });
 });
 
+// Clears the application-side cache and returns a new deployment revision.
+// Reverse proxies honor the no-cache headers set by server.js on the next reload.
+router.post('/refresh-ui-cache', (req, res) => {
+  const revision = String(Date.now());
+  const cacheCleared = cacheManager.clear();
+  db.setSetting('ui_cache_revision', revision);
+  db.logAuditEvent({ userId: req.user.id, userEmail: req.user.email, action: 'UI_CACHE_REFRESHED', details: { revision, cacheCleared }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, revision, cacheCleared, message: 'Application cache cleared. Reloading fresh interface assets.' });
+});
+
 router.get('/sessions', (req, res) => {
   const sessions = sessionTracker.getActiveSessions().map(session => ({ ...session, isCurrent: session.id === req.authSessionId }));
   res.json({ success: true, sessions });
@@ -88,8 +101,19 @@ router.put('/notification-settings', (req, res) => {
   res.json({ success: true });
 });
 router.post('/notification-settings/test', async (req, res) => {
-  await notifySecurityEvent('Notification test', { by: req.user.email, time: new Date().toISOString() });
-  res.json({ success: true, message: 'Test alert queued for configured channels.' });
+  const channel = String(req.body?.channel || 'telegram').toLowerCase();
+  if (!['telegram', 'discord', 'email'].includes(channel)) return res.status(400).json({ error: 'Choose Telegram, Discord, or email for the test.' });
+
+  const key = `${req.user.id}:${channel}`;
+  const now = Date.now();
+  if (now - (recentTestAlerts.get(key) || 0) < 15000) {
+    return res.status(429).json({ error: 'A test was already sent. Please wait 15 seconds before sending another.' });
+  }
+  recentTestAlerts.set(key, now);
+  const result = await notifySecurityEvent('Notification test', { by: req.user.email, time: new Date().toISOString() }, { channels: [channel] });
+  if (!result?.attempted) return res.status(400).json({ error: `No active ${channel} alert destination is configured.` });
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, message: `One test alert sent through ${channel}.`, result });
 });
 
 // List all users

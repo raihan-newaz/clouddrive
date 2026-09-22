@@ -34,8 +34,11 @@ const App = {
   renderedFileCount: 0,
   _virtualScrollObserver: null,
   _VIRTUAL_PAGE_SIZE: 40,
+  _initialized: false,
 
   async init() {
+    if (this._initialized) return;
+    this._initialized = true;
     try {
       this.initTheme();
 
@@ -453,6 +456,23 @@ const App = {
     if (securityButton) securityButton.onclick = () => { setWorkspace('settings'); document.getElementById('pane-security')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
     if (settingsButton) settingsButton.onclick = () => { setWorkspace('settings'); document.getElementById('pane-discord')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
     document.getElementById('admin-refresh-dashboard')?.addEventListener('click', () => Promise.all([renderDashboard(), renderAudit(), renderBlockedIps(), renderOperations()]));
+    document.getElementById('admin-refresh-ui-cache')?.addEventListener('click', async event => {
+      const button = event.currentTarget;
+      if (button.disabled) return;
+      button.disabled = true;
+      try {
+        const result = await API.request('POST', '/api/admin/refresh-ui-cache');
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(key => caches.delete(key)));
+        }
+        UI.showToast(result.message || 'Site cache cleared. Reloading…', 'success');
+        window.setTimeout(() => window.location.replace(`${window.location.pathname}?refresh=${result.revision || Date.now()}`), 500);
+      } catch (error) {
+        UI.showToast(error.message || 'Unable to refresh site cache', 'error');
+        button.disabled = false;
+      }
+    });
     document.getElementById('admin-maintenance-mode')?.addEventListener('change', async event => {
       try { await API.request('PUT', '/api/admin/maintenance', { enabled: event.target.checked }); UI.showToast(event.target.checked ? 'Maintenance mode enabled' : 'Maintenance mode disabled', 'success'); }
       catch (error) { event.target.checked = !event.target.checked; UI.showToast(error.message || 'Unable to update maintenance mode', 'error'); }
@@ -462,7 +482,20 @@ const App = {
       try { await API.request('PUT', '/api/admin/notification-settings', { enabled: document.getElementById('admin-alerts-enabled').checked, telegram: document.getElementById('admin-alert-telegram').checked, discord: document.getElementById('admin-alert-discord').checked, email: document.getElementById('admin-alert-email').checked, emailTo: document.getElementById('admin-alert-email-to').value.trim() }); UI.showToast('Alert settings saved', 'success'); await renderOperations(); }
       catch (error) { UI.showToast(error.message || 'Unable to save alert settings', 'error'); }
     });
-    document.getElementById('admin-test-alert')?.addEventListener('click', async () => { try { await API.request('POST', '/api/admin/notification-settings/test'); UI.showToast('Test alert queued', 'success'); } catch (error) { UI.showToast(error.message || 'Unable to queue test alert', 'error'); } });
+    document.getElementById('admin-test-alert')?.addEventListener('click', async event => {
+      const button = event.currentTarget;
+      if (button.disabled) return;
+      button.disabled = true;
+      try {
+        const channel = document.getElementById('admin-test-alert-channel')?.value || 'telegram';
+        const result = await API.request('POST', '/api/admin/notification-settings/test', { channel });
+        UI.showToast(result.message || 'One test alert sent', 'success');
+      } catch (error) {
+        UI.showToast(error.message || 'Unable to send test alert', 'error');
+      } finally {
+        window.setTimeout(() => { button.disabled = false; }, 1500);
+      }
+    });
     ['admin-audit-search', 'admin-audit-user', 'admin-audit-file', 'admin-audit-ip'].forEach(id => document.getElementById(id)?.addEventListener('input', renderAudit));
     document.getElementById('admin-audit-action')?.addEventListener('change', renderAudit);
     const blockForm = document.getElementById('admin-block-ip-form');
@@ -1579,17 +1612,6 @@ const App = {
     const fileContainer = document.getElementById('file-container');
     if (!fileContainer) return;
 
-    // Keep drag state resilient when the browser fires dragend before drop
-    // (this can happen when dragging over nested card children).
-    const readDraggedItem = (event) => {
-      if (this.draggedItem) return this.draggedItem;
-      try {
-        const raw = event?.dataTransfer?.getData('application/x-discorddrive-item');
-        if (raw) return JSON.parse(raw);
-      } catch (_) { /* Ignore browser dataTransfer restrictions. */ }
-      return null;
-    };
-
     // Click handler (delegated)
     fileContainer.addEventListener('click', (e) => {
       // 1. Check if selection checkbox button was clicked
@@ -1752,7 +1774,19 @@ const App = {
     const breadcrumb = document.getElementById('breadcrumb');
     const driveNavItem = document.querySelector('.sidebar-nav .nav-item[data-view="drive"]');
 
-    if (!fileContainer) return;
+    if (!fileContainer || this._dragAndDropInitialized) return;
+    this._dragAndDropInitialized = true;
+
+    // Keep drag state resilient when the browser fires dragend before drop
+    // (this can happen when dragging over nested card children).
+    const readDraggedItem = (event) => {
+      if (this.draggedItem) return this.draggedItem;
+      try {
+        const raw = event?.dataTransfer?.getData('application/x-discorddrive-item');
+        if (raw) return JSON.parse(raw);
+      } catch (_) { /* Ignore browser dataTransfer restrictions. */ }
+      return null;
+    };
 
     // 1. Drag Start on File / Folder Cards
     fileContainer.addEventListener('dragstart', (e) => {

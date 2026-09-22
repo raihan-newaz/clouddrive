@@ -77,6 +77,10 @@ app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html')) {
       res.setHeader('Cache-Control', 'no-cache');
+    } else if (/\.(?:js|css)$/i.test(filePath)) {
+      // Admin-triggered UI refreshes and reverse proxies can safely revalidate
+      // versioned front-end assets instead of serving an old deployment.
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     }
   }
 }));
