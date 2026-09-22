@@ -1579,6 +1579,17 @@ const App = {
     const fileContainer = document.getElementById('file-container');
     if (!fileContainer) return;
 
+    // Keep drag state resilient when the browser fires dragend before drop
+    // (this can happen when dragging over nested card children).
+    const readDraggedItem = (event) => {
+      if (this.draggedItem) return this.draggedItem;
+      try {
+        const raw = event?.dataTransfer?.getData('application/x-discorddrive-item');
+        if (raw) return JSON.parse(raw);
+      } catch (_) { /* Ignore browser dataTransfer restrictions. */ }
+      return null;
+    };
+
     // Click handler (delegated)
     fileContainer.addEventListener('click', (e) => {
       // 1. Check if selection checkbox button was clicked
@@ -1756,7 +1767,11 @@ const App = {
 
       const id = card.getAttribute('data-id');
       const type = card.getAttribute('data-type');
-      const item = type === 'folder' ? this.foldersMap.get(id) : this.filesMap.get(id);
+      const item = (type === 'folder' ? this.foldersMap.get(id) : this.filesMap.get(id)) || {
+        id,
+        type,
+        name: card.querySelector(type === 'folder' ? '.folder-name' : '.file-name')?.textContent?.trim() || 'Item'
+      };
       if (!item) return;
 
       this.draggedItem = item;
@@ -1782,13 +1797,14 @@ const App = {
 
     // 3. Drag Over / Enter on Folder Cards
     fileContainer.addEventListener('dragover', (e) => {
-      if (!this.draggedItem) return;
+      const draggedItem = readDraggedItem(e);
+      if (!draggedItem) return;
       const folderCard = e.target.closest('.folder-card');
       if (!folderCard) return;
 
       const targetFolderId = folderCard.getAttribute('data-id');
       // Cannot move folder into itself
-      if (this.draggedItem.type === 'folder' && this.draggedItem.id === targetFolderId) {
+      if (draggedItem.type === 'folder' && String(draggedItem.id) === String(targetFolderId)) {
         return;
       }
 
@@ -1808,7 +1824,8 @@ const App = {
     // 4. Drop on Folder Card
     fileContainer.addEventListener('drop', async (e) => {
       const folderCard = e.target.closest('.folder-card');
-      if (!folderCard || !this.draggedItem) return;
+      const draggedItem = readDraggedItem(e);
+      if (!folderCard || !draggedItem) return;
 
       e.preventDefault();
       e.stopPropagation();
@@ -1818,13 +1835,13 @@ const App = {
       const targetFolder = this.foldersMap.get(targetFolderId);
       const targetName = targetFolder ? targetFolder.name : 'Folder';
 
-      await this.executeMove(this.draggedItem, targetFolderId, targetName);
+      await this.executeMove(draggedItem, targetFolderId, targetName);
     });
 
     // 5. Drop on Breadcrumb Ancestor Folders
     if (breadcrumb) {
       breadcrumb.addEventListener('dragover', (e) => {
-        if (!this.draggedItem) return;
+        if (!readDraggedItem(e)) return;
         const bItem = e.target.closest('a.breadcrumb-item');
         if (!bItem) return;
 
@@ -1846,7 +1863,8 @@ const App = {
 
       breadcrumb.addEventListener('drop', async (e) => {
         const bItem = e.target.closest('a.breadcrumb-item');
-        if (!bItem || !this.draggedItem) return;
+        const draggedItem = readDraggedItem(e);
+        if (!bItem || !draggedItem) return;
 
         e.preventDefault();
         e.stopPropagation();
@@ -1856,14 +1874,14 @@ const App = {
         const targetFolderId = (rawId && rawId !== 'null' && rawId !== '') ? rawId : null;
         const targetName = bItem.textContent.trim() || 'My Drive';
 
-        await this.executeMove(this.draggedItem, targetFolderId, targetName);
+        await this.executeMove(draggedItem, targetFolderId, targetName);
       });
     }
 
     // 6. Drop on Sidebar "My Drive" (Root)
     if (driveNavItem) {
       driveNavItem.addEventListener('dragover', (e) => {
-        if (!this.draggedItem || this.currentFolderId === null) return;
+        if (!readDraggedItem(e) || this.currentFolderId === null) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         driveNavItem.classList.add('drag-over');
@@ -1876,11 +1894,12 @@ const App = {
       });
 
       driveNavItem.addEventListener('drop', async (e) => {
-        if (!this.draggedItem || this.currentFolderId === null) return;
+        const draggedItem = readDraggedItem(e);
+        if (!draggedItem || this.currentFolderId === null) return;
         e.preventDefault();
         e.stopPropagation();
         driveNavItem.classList.remove('drag-over');
-        await this.executeMove(this.draggedItem, null, 'My Drive');
+        await this.executeMove(draggedItem, null, 'My Drive');
       });
     }
   },
