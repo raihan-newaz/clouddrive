@@ -255,7 +255,10 @@ const API = {
   },
 
   async getFolderTree() {
-    return this.request('GET', '/api/folders/tree');
+    const response = await this.request('GET', '/api/folders/tree');
+    // The API wraps the recursive tree in { success, tree }. Keep the UI
+    // contract as an array so the move dialog can render every depth.
+    return Array.isArray(response) ? response : (Array.isArray(response?.tree) ? response.tree : []);
   },
 
   async getFolderStats(id) {
