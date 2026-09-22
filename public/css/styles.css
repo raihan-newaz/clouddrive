@@ -5037,6 +5037,8 @@ body.dragging .drop-zone-content {
   white-space: nowrap;
   flex-shrink: 0;
 }
+.cache-action-buttons { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
+@media (max-width: 680px) { .cache-action-buttons { width:100%; }.cache-action-buttons button { flex:1 1 170px; } }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 /* GOOGLE DRIVE STYLE SHARE MODAL                                            */

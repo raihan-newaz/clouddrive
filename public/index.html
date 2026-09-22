@@ -27,7 +27,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/themes.css?v=20260921_29">
-  <link rel="stylesheet" href="/css/styles.css?v=20260923_66">
+  <link rel="stylesheet" href="/css/styles.css?v=20260923_67">
   <link rel="stylesheet" href="/css/responsive.css?v=20260921_28">
   <script>
     (function() {
@@ -727,7 +727,7 @@
   <div class="modal" id="create-folder-modal" style="display:none;">
     <h3>Create New Folder</h3>
     <div class="form-group">
-      <input type="text" id="folder-name-input" placeholder="Folder name (e.g. Work, Photos)" autofocus>
+      <input type="text" id="folder-name-input" name="clouddrive_new_folder" placeholder="Folder name (e.g. Work, Photos)" autofocus autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
     </div>
     <div class="modal-actions">
       <button class="btn-secondary" data-modal-cancel>Cancel</button>
@@ -892,7 +892,7 @@
   <div class="modal" id="rename-modal" style="display:none;">
     <h3>Rename Item</h3>
     <div class="form-group">
-      <input type="text" id="rename-input" placeholder="New name">
+      <input type="text" id="rename-input" name="clouddrive_rename_item" placeholder="New name" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
     </div>
     <div class="modal-actions">
       <button class="btn-secondary" data-modal-cancel>Cancel</button>
@@ -1920,8 +1920,8 @@
             </div>
             <div class="storage-card-content">
               <span class="storage-card-label">Local Cache (3 GB Limit)</span>
-              <strong id="settings-cache-size" class="storage-card-val">0 B</strong>
-              <small style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Auto LRU Active</small>
+              <strong id="settings-cache-size" class="storage-card-val">Checking…</strong>
+              <small id="settings-cache-status" style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Checking cache policy…</small>
             </div>
           </div>
         </div>
@@ -1999,17 +1999,15 @@
       <!-- Section 4: Local Cache Management -->
       <div class="settings-section" style="margin-top: 20px;">
         <div class="settings-section-title">
-          <h4>Local Cache Management <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 11px; padding: 2px 8px; border-radius: 12px; margin-left: 6px;">Auto LRU Active</span></h4>
-          <p>Decrypted files are cached locally for instant streaming up to <strong>3 GB</strong>. When the limit is reached, older files are automatically pruned to protect your disk space.</p>
+          <h4>Local Cache Management <span id="settings-cache-badge" class="badge" style="background: rgba(148, 163, 184, 0.15); color: var(--text-secondary); font-size: 11px; padding: 2px 8px; border-radius: 12px; margin-left: 6px;">Checking…</span></h4>
+          <p id="settings-cache-description">Checking whether encrypted streaming cache is enabled on this server.</p>
         </div>
         <div class="cache-action-box">
           <div>
-            <strong>Clear Temporary Cache</strong>
-            <p>Free disk space immediately. Files remain completely safe and untouched in your Discord & Telegram clouds.</p>
+            <strong>Clear Server Cache</strong>
+            <p>Removes decrypted temporary files from the CloudDrive server. Cloud files remain untouched.</p>
           </div>
-          <button type="button" class="btn-danger" id="btn-clear-cache">
-            <span>Clear Cache</span>
-          </button>
+          <div class="cache-action-buttons"><button type="button" class="btn-danger" id="btn-clear-cache"><span>Clear Server Cache</span></button><button type="button" class="btn-secondary" id="btn-purge-browser-cache"><span>Purge Browser + Server</span></button></div>
         </div>
       </div>
     </div>
@@ -2665,7 +2663,7 @@
   <script src="/js/preview.js?v=20260921_63"></script>
   <script src="/js/setup.js?v=20260921_74"></script>
   <script src="/js/pwa.js?v=20260920_59"></script>
-    <script src="/js/app.js?v=20260923_78"></script>
+    <script src="/js/app.js?v=20260923_79"></script>
 </body>
 </html>
 

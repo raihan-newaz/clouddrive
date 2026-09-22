@@ -41,6 +41,7 @@ const App = {
     this._initialized = true;
     try {
       this.initTheme();
+      this.disableBrowserFormHistory();
 
       // Check setup status with automatic retry for server startup
       let setupStatus = null;
@@ -126,6 +127,22 @@ const App = {
     }
   },
 
+  // Keep private file names and administrative values out of browser form
+  // history. Password managers may still offer their own controls by design.
+  disableBrowserFormHistory() {
+    try {
+      localStorage.removeItem('discorddrive_last_email');
+      document.querySelectorAll('input:not([type="file"]):not([type="hidden"]), textarea').forEach(input => {
+        input.setAttribute('autocomplete', 'off');
+        input.setAttribute('autocapitalize', 'off');
+        input.setAttribute('autocorrect', 'off');
+        input.setAttribute('spellcheck', 'false');
+        input.setAttribute('data-lpignore', 'true');
+        input.setAttribute('data-1password-ignore', 'true');
+      });
+    } catch (_) { /* Privacy hints are best-effort across browser vendors. */ }
+  },
+
   showScreen(screen) {
     const loaderEl = document.getElementById('app-loader');
     const setupEl = document.getElementById('setup-screen');
@@ -156,9 +173,6 @@ const App = {
         setTimeout(() => {
           const emailInput = document.getElementById('login-email');
           const pwdInput = document.getElementById('login-password');
-          if (emailInput && !emailInput.value) {
-            emailInput.value = localStorage.getItem('discorddrive_last_email') || '';
-          }
           if (emailInput && !emailInput.value) {
             emailInput.focus();
           } else if (pwdInput) {
@@ -2591,7 +2605,6 @@ const App = {
 
         try {
           const authData = await API.login(email, pwd);
-          if (email) localStorage.setItem('discorddrive_last_email', email);
           this.user = authData?.user || null;
           const adminLink = document.getElementById('sidebar-admin-center-link');
           if (adminLink) adminLink.style.display = this.user?.role === 'admin' ? 'flex' : 'none';
@@ -4658,11 +4671,47 @@ const App = {
           UI.showToast(res.message || 'Decryption cache cleared!', 'success');
           const cacheSizeEl = document.getElementById('settings-cache-size');
           if (cacheSizeEl) cacheSizeEl.textContent = '0 B';
+          await this.loadSettings();
         } catch (err) {
           UI.showToast('Failed to clear cache: ' + err.message, 'error');
         } finally {
           btnClearCache.disabled = false;
           btnClearCache.innerHTML = '<span><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>Clear Local Cache</span>';
+        }
+      };
+    }
+
+    const btnPurgeBrowserCache = document.getElementById('btn-purge-browser-cache');
+    if (btnPurgeBrowserCache) {
+      btnPurgeBrowserCache.onclick = async () => {
+        if (btnPurgeBrowserCache.disabled) return;
+        btnPurgeBrowserCache.disabled = true;
+        btnPurgeBrowserCache.textContent = 'Purging…';
+        try {
+          await API.clearCache();
+          if ('caches' in window) {
+            const cacheKeys = await caches.keys();
+            await Promise.all(cacheKeys.map(key => caches.delete(key)));
+          }
+          if (navigator.serviceWorker?.getRegistrations) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map(registration => registration.unregister()));
+          }
+          if (indexedDB.databases) {
+            const databases = await indexedDB.databases();
+            await Promise.all(databases.filter(database => /cloud|drive/i.test(database.name || '')).map(database => new Promise(resolve => {
+              const request = indexedDB.deleteDatabase(database.name);
+              request.onsuccess = request.onerror = request.onblocked = () => resolve();
+            })));
+          }
+          localStorage.clear();
+          sessionStorage.clear();
+          UI.showToast('Browser and server cache cleared. Reloading…', 'success');
+          window.setTimeout(() => window.location.replace(`${window.location.pathname}?fresh=${Date.now()}`), 400);
+        } catch (error) {
+          UI.showToast(error.message || 'Unable to purge browser cache', 'error');
+          btnPurgeBrowserCache.disabled = false;
+          btnPurgeBrowserCache.textContent = 'Purge Browser + Server';
         }
       };
     }
@@ -5647,8 +5696,21 @@ const App = {
 
         // Cache
         const cacheEl = document.getElementById('settings-cache-size');
+        const cacheStatusEl = document.getElementById('settings-cache-status');
+        const cacheBadgeEl = document.getElementById('settings-cache-badge');
+        const cacheDescriptionEl = document.getElementById('settings-cache-description');
         if (cacheEl && data.cache) {
-          cacheEl.textContent = UI.formatFileSize(data.cache.totalBytes || 0);
+          const enabled = data.cache.enabled === true;
+          cacheEl.textContent = enabled ? UI.formatFileSize(data.cache.totalBytes || 0) : 'Disabled';
+          if (cacheStatusEl) cacheStatusEl.textContent = enabled ? `Encrypted streaming cache · ${UI.formatFileSize(data.cache.limitBytes || 0)} limit` : 'Disabled for privacy — no decrypted files are retained on server';
+          if (cacheBadgeEl) {
+            cacheBadgeEl.textContent = enabled ? 'Auto LRU active' : 'Secure mode — off';
+            cacheBadgeEl.style.background = enabled ? 'rgba(16, 185, 129, 0.15)' : 'rgba(148, 163, 184, 0.15)';
+            cacheBadgeEl.style.color = enabled ? '#10b981' : 'var(--text-secondary)';
+          }
+          if (cacheDescriptionEl) cacheDescriptionEl.innerHTML = enabled
+            ? `Decrypted streaming data is temporarily cached for faster playback up to <strong>${UI.formatFileSize(data.cache.limitBytes || 0)}</strong>. Older items are removed automatically.`
+            : 'Secure mode is active: decrypted file data is <strong>not stored</strong> on the server, so cache usage stays at 0 B. Enable <code>ALLOW_PLAINTEXT_CACHE=true</code> on the server only if faster repeat streaming is worth retaining temporary decrypted data.';
         }
       }
 

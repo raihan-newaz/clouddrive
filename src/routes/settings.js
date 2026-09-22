@@ -74,6 +74,7 @@ router.get('/', async (req, res) => {
       encryptionEnabled: db.getSetting('encryption_enabled', req.user ? req.user.id : null) !== 'false'
     },
     cache: {
+      enabled: cacheManager.enabled,
       totalBytes: cacheManager.getTotalCacheSize(),
       limitBytes: cacheManager.maxCacheBytes
     }
