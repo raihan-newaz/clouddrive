@@ -286,8 +286,15 @@ const UploadManager = {
       const types = Array.from(e.dataTransfer.types);
       return types.includes('Files') || types.includes('application/x-moz-file') || types.includes('public.file-url');
     };
+    const isInternalMove = (e) => {
+      if (!e.dataTransfer || !e.dataTransfer.types) return false;
+      return Array.from(e.dataTransfer.types).includes('application/x-clouddrive-item');
+    };
 
     window.addEventListener('dragenter', (e) => {
+      // A file/folder card being moved inside CloudDrive is not an upload.
+      // Leave it to App's folder drop handler so the two systems never compete.
+      if (isInternalMove(e)) return;
       e.preventDefault();
       if (isFileDrag(e)) {
         dragCounter++;
@@ -296,6 +303,7 @@ const UploadManager = {
     });
 
     window.addEventListener('dragover', (e) => {
+      if (isInternalMove(e)) return;
       e.preventDefault();
       if (e.dataTransfer) {
         e.dataTransfer.dropEffect = 'copy';
@@ -306,6 +314,7 @@ const UploadManager = {
     });
 
     window.addEventListener('dragleave', (e) => {
+      if (isInternalMove(e)) return;
       e.preventDefault();
       dragCounter = Math.max(0, dragCounter - 1);
       if (dragCounter === 0 || (e.clientX === 0 && e.clientY === 0)) {
@@ -315,6 +324,7 @@ const UploadManager = {
     });
 
     const handleDrop = async (e) => {
+      if (isInternalMove(e)) return;
       e.preventDefault();
       e.stopPropagation();
       dragCounter = 0;

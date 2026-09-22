@@ -1455,6 +1455,11 @@ input:focus, select:focus, textarea:focus {
   font-weight: 600;
   display: block;
 }
+.storage-provider { display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
+.storage-provider svg { width:13px; height:13px; fill:currentColor; }
+.storage-provider-telegram { color:#38bdf8; }
+.storage-provider-discord { color:#818cf8; }
+.storage-provider-divider { color:var(--text-disabled); margin:0 3px; }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 /* CONTENT AREA                                                               */
@@ -6108,6 +6113,7 @@ body.is-pwa-standalone .pwa-install-btn {
 @media (max-width: 840px) { .admin-alert-actions { grid-template-columns:1fr 1fr; }.admin-alert-actions > div { grid-column:1 / -1; } }
 @media (max-width: 640px) { .admin-operations-heading,.admin-notification-form { padding-left:15px; padding-right:15px; }.admin-maintenance-row { margin-left:15px; margin-right:15px; }.admin-channel-grid { grid-template-columns:1fr; }.admin-alert-actions { grid-template-columns:1fr; }.admin-alert-actions > div { display:grid; grid-template-columns:1fr 1fr; }.admin-alert-actions button { width:100%; } }
 @media (max-width: 900px) { .admin-stat-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.admin-dashboard-grid { grid-template-columns:1fr; }.admin-action-grid { grid-template-columns:1fr; }.admin-workspace-nav { grid-template-columns:repeat(2,minmax(0,1fr)); }.admin-block-form-inline { grid-template-columns:1fr 1fr auto; } }
+@media (min-width: 841px) and (max-width: 1180px) { .admin-center-page { padding:22px; }.admin-dashboard-grid { grid-template-columns:1fr; }.admin-alert-actions { grid-template-columns:minmax(0,1fr) minmax(140px,.45fr); }.admin-alert-actions > div { grid-column:1 / -1; justify-content:flex-end; }.admin-maintenance-row,.admin-notification-topline { align-items:flex-start; }.admin-switch { margin-top:2px; } }
 @media (max-width: 560px) { .admin-center-page { padding:18px; }.admin-center-header { display:grid; }.admin-stat-grid,.admin-filter-grid { grid-template-columns:1fr; }.admin-filter-grid > :first-child { grid-column:auto; }.admin-workspace-nav { margin-top:14px; }.admin-workspace-nav button { padding:10px; }.admin-ip-control-bar .admin-section-header { align-items:flex-start; }.admin-blocked-inline { justify-content:flex-start; max-width:100%; margin-top:8px; }.admin-block-form-inline { grid-template-columns:1fr; }.admin-block-form-inline button { width:100%; } }
 @media (max-width: 560px) { .admin-security-shortcut { grid-template-columns:auto 1fr; }.admin-security-shortcut button { grid-column:1 / -1; width:100%; } }
 

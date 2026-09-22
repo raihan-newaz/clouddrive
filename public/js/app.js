@@ -551,13 +551,14 @@ const App = {
 
       const tgBytes = (s.telegram && s.telegram.bytes !== undefined) ? s.telegram.bytes : (s.telegramBytes || 0);
       const dcBytes = (s.discord && s.discord.bytes !== undefined) ? s.discord.bytes : (s.discordBytes || 0);
+      const providerUsageHtml = `<span class="storage-provider storage-provider-telegram" title="Telegram storage"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.7 3.2 18.5 20c-.24 1.18-.88 1.47-1.78.92l-4.92-3.63-2.37 2.28c-.26.26-.48.48-.98.48l.35-4.98 9.06-8.19c.39-.35-.09-.55-.61-.2L6.05 13.73 1.23 12.22c-1.05-.33-1.07-1.05.22-1.56L20.3 3.4c.87-.32 1.63.2 1.4 1.82Z"/></svg>${UI.formatFileSize(tgBytes)}</span><span class="storage-provider-divider" aria-hidden="true">·</span><span class="storage-provider storage-provider-discord" title="Discord storage"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 4.6A16.3 16.3 0 0 0 15.7 3l-.47.94a14.8 14.8 0 0 0-4.46 0L10.3 3A16.5 16.5 0 0 0 6.5 4.6C4.1 8.2 3.45 11.7 3.78 15.15a15.3 15.3 0 0 0 4.66 2.35l1.13-1.55a9.8 9.8 0 0 1-1.77-.85l.42-.33c3.42 1.57 7.13 1.57 10.5 0l.42.33c-.57.34-1.16.62-1.77.85l1.13 1.55a15.3 15.3 0 0 0 4.66-2.35c.39-4-.67-7.47-3.66-10.55ZM8.72 13.04c-1.03 0-1.87-.95-1.87-2.12s.82-2.12 1.87-2.12c1.05 0 1.89.95 1.87 2.12 0 1.17-.82 2.12-1.87 2.12Zm6.56 0c-1.03 0-1.87-.95-1.87-2.12s.82-2.12 1.87-2.12c1.05 0 1.89.95 1.87 2.12 0 1.17-.82 2.12-1.87 2.12Z"/></svg>${UI.formatFileSize(dcBytes)}</span>`;
 
       if (s.storageLimit > 0) {
         const quotaFormatted = UI.formatFileSize(s.storageLimit);
         const pct = s.usagePercentage !== undefined ? s.usagePercentage : Math.min(100, Math.round((usedBytes / s.storageLimit) * 100));
         if (storageSubtext) {
           if (tgBytes > 0 || dcBytes > 0) {
-            storageSubtext.textContent = `TG: ${UI.formatFileSize(tgBytes)} • DC: ${UI.formatFileSize(dcBytes)}`;
+            storageSubtext.innerHTML = providerUsageHtml;
           } else {
             storageSubtext.textContent = `${pct}% of ${quotaFormatted} used`;
           }
@@ -571,7 +572,7 @@ const App = {
       } else {
         if (storageSubtext) {
           if (tgBytes > 0 || dcBytes > 0) {
-            storageSubtext.textContent = `TG: ${UI.formatFileSize(tgBytes)} • DC: ${UI.formatFileSize(dcBytes)}`;
+            storageSubtext.innerHTML = providerUsageHtml;
           } else {
             storageSubtext.textContent = 'Unlimited Free Storage';
           }
@@ -1782,7 +1783,7 @@ const App = {
     const readDraggedItem = (event) => {
       if (this.draggedItem) return this.draggedItem;
       try {
-        const raw = event?.dataTransfer?.getData('application/x-discorddrive-item');
+        const raw = event?.dataTransfer?.getData('application/x-clouddrive-item') || event?.dataTransfer?.getData('application/x-discorddrive-item') || event?.dataTransfer?.getData('text/plain');
         if (raw) return JSON.parse(raw);
       } catch (_) { /* Ignore browser dataTransfer restrictions. */ }
       return null;
@@ -1811,7 +1812,11 @@ const App = {
       this.draggedItem = item;
       this.draggedCardElement = card;
 
-      e.dataTransfer.setData('application/x-discorddrive-item', JSON.stringify({ id: item.id, type: item.type, name: item.name }));
+      const transferItem = JSON.stringify({ id: item.id, type: item.type, name: item.name });
+      e.dataTransfer.setData('application/x-clouddrive-item', transferItem);
+      // text/plain keeps the move payload available in browsers that restrict
+      // custom drag MIME types between nested elements.
+      e.dataTransfer.setData('text/plain', transferItem);
       e.dataTransfer.effectAllowed = 'move';
 
       setTimeout(() => {
@@ -1830,7 +1835,7 @@ const App = {
     });
 
     // 3. Drag Over / Enter on Folder Cards
-    fileContainer.addEventListener('dragover', (e) => {
+    const allowFolderDrop = (e) => {
       const draggedItem = readDraggedItem(e);
       if (!draggedItem) return;
       const folderCard = e.target.closest('.folder-card');
@@ -1845,7 +1850,9 @@ const App = {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
       folderCard.classList.add('drag-over');
-    });
+    };
+    fileContainer.addEventListener('dragenter', allowFolderDrop);
+    fileContainer.addEventListener('dragover', allowFolderDrop);
 
     fileContainer.addEventListener('dragleave', (e) => {
       const folderCard = e.target.closest('.folder-card');
