@@ -1123,6 +1123,30 @@
     </div>
   </div>
 
+  <!-- In-app confirmation works in installed PWAs and embedded browsers. -->
+  <div class="modal custom-confirm-modal" id="telegram-purge-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="telegram-purge-title">
+    <div class="confirm-modal-content">
+      <div class="confirm-icon-wrapper danger">
+        <div class="confirm-icon">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        </div>
+      </div>
+      <div class="confirm-text-wrap">
+        <h3 id="telegram-purge-title">Delete Telegram uploads?</h3>
+        <p>This permanently deletes CloudDrive-managed Telegram messages. File records stay intact.</p>
+        <div class="confirm-subtext danger" style="display:block;">Enter your admin password and type <strong>DELETE_ALL_TELEGRAM_MESSAGES</strong> to enable deletion.</div>
+        <div style="display:grid; gap:10px; margin-top:16px;">
+          <input id="telegram-purge-password" type="password" placeholder="Admin password" autocomplete="off" autocapitalize="none" spellcheck="false">
+          <input id="telegram-purge-confirmation" type="text" placeholder="DELETE_ALL_TELEGRAM_MESSAGES" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        </div>
+      </div>
+      <div class="modal-actions confirm-actions">
+        <button type="button" class="btn-secondary" id="telegram-purge-cancel">Cancel</button>
+        <button type="button" class="btn-danger" id="telegram-purge-confirm" disabled>Delete uploads</button>
+      </div>
+    </div>
+  </div>
+
   <!-- FILE INFORMATION MODAL -->
   <div class="modal file-info-modal" id="file-info-modal" style="display:none;">
     <div class="file-info-header">
@@ -2666,7 +2690,7 @@
   <script src="/js/preview.js?v=20260921_63"></script>
   <script src="/js/setup.js?v=20260921_74"></script>
   <script src="/js/pwa.js?v=20260920_59"></script>
-    <script src="/js/app.js?v=20260923_81"></script>
+    <script src="/js/app.js?v=20260923_84"></script>
 </body>
 </html>
 

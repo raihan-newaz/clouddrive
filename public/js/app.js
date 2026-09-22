@@ -6931,22 +6931,51 @@ function initAdminRecoveryActions() {
     const purge = event.target.closest('#btn-purge-telegram-known');
     if (!purge) return;
     event.preventDefault();
-    const password = window.prompt('Admin password:'); if (!password) return;
-    const confirmation = window.prompt('Type DELETE_ALL_TELEGRAM_MESSAGES to permanently delete CloudDrive Telegram uploads:');
-    if (confirmation !== 'DELETE_ALL_TELEGRAM_MESSAGES') return window.alert('Cancelled. Nothing was deleted.');
+    const credentials = await openTelegramPurgeModal();
+    if (!credentials) return;
     purge.disabled = true;
     const originalLabel = purge.textContent;
     purge.textContent = 'Deleting Telegram uploads…';
     try {
-      const response = await fetch('/api/settings/telegram/purge-known', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, confirmation }) });
+      const response = await fetch('/api/settings/telegram/purge-known', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credentials) });
       const data = await response.json().catch(() => ({}));
-      window.alert(data.message || data.error || 'Cleanup failed');
+      UI.showToast(data.message || data.error || 'Cleanup failed', response.ok ? 'success' : 'error');
     } catch (error) {
-      window.alert(`Cleanup request failed: ${error.message}`);
+      UI.showToast(`Cleanup request failed: ${error.message}`, 'error');
     } finally {
       purge.disabled = false;
       purge.textContent = originalLabel;
     }
+  });
+}
+
+function openTelegramPurgeModal() {
+  return new Promise(resolve => {
+    const modal = document.getElementById('telegram-purge-modal');
+    const password = document.getElementById('telegram-purge-password');
+    const confirmation = document.getElementById('telegram-purge-confirmation');
+    const confirm = document.getElementById('telegram-purge-confirm');
+    const cancel = document.getElementById('telegram-purge-cancel');
+    if (!modal || !password || !confirmation || !confirm || !cancel || typeof UI === 'undefined') return resolve(null);
+
+    password.value = '';
+    confirmation.value = '';
+    const refresh = () => {
+      confirm.disabled = !(password.value && confirmation.value === 'DELETE_ALL_TELEGRAM_MESSAGES');
+    };
+    const close = result => {
+      password.removeEventListener('input', refresh);
+      confirmation.removeEventListener('input', refresh);
+      UI.hideModal('telegram-purge-modal');
+      resolve(result);
+    };
+    password.addEventListener('input', refresh);
+    confirmation.addEventListener('input', refresh);
+    cancel.onclick = () => close(null);
+    confirm.onclick = () => close({ password: password.value, confirmation: confirmation.value });
+    UI.showModal('telegram-purge-modal');
+    refresh();
+    password.focus();
   });
 }
 initAdminRecoveryActions();
