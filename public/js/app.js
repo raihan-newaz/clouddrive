@@ -1888,11 +1888,14 @@ const App = {
   async executeMove(item, targetFolderId, targetFolderName) {
     if (!item) return;
 
-    if (item.type === 'folder' && item.id === targetFolderId) {
+    const itemId = String(item.id);
+    const destinationId = targetFolderId === undefined || targetFolderId === null || targetFolderId === 'null' || targetFolderId === 'root' || targetFolderId === '' ? null : String(targetFolderId);
+
+    if (item.type === 'folder' && itemId === destinationId) {
       UI.showToast('Cannot move a folder into itself', 'warning');
       return;
     }
-    if (item.type === 'file' && item.folder_id === targetFolderId) {
+    if (item.type === 'file' && String(item.folder_id || '') === String(destinationId || '')) {
       return;
     }
 
@@ -1902,9 +1905,9 @@ const App = {
       }
 
       if (item.type === 'folder') {
-        await API.moveFolder(item.id, targetFolderId);
+        await API.moveFolder(item.id, destinationId);
       } else {
-        await API.moveFile(item.id, targetFolderId);
+        await API.moveFile(item.id, destinationId);
       }
 
       UI.showToast(`Moved "${item.name}" to "${targetFolderName}"`, 'success');

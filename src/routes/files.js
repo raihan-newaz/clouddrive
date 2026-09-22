@@ -1315,11 +1315,23 @@ router.patch('/:id', (req, res) => {
   const updates = {};
   if (name !== undefined) updates.name = decodeUtf8FileName(name);
   const fid = folder_id !== undefined ? folder_id : folderId;
-  if (fid !== undefined) updates.folder_id = (fid === 'null' || fid === 'root' || !fid) ? null : fid;
+  if (fid !== undefined) {
+    const targetFolderId = (fid === 'null' || fid === 'root' || !fid) ? null : String(fid);
+    if (targetFolderId) {
+      const targetFolder = db.getFolderById(targetFolderId, req.user.id);
+      if (!targetFolder) return res.status(404).json({ error: 'Destination folder not found' });
+      if (targetFolder.is_trashed) return res.status(400).json({ error: 'Cannot move a file into Trash' });
+      if (targetFolder.is_locked && !requireUnlockedFile(req, res, { folder_id: targetFolder.id })) return;
+    }
+    updates.folder_id = targetFolderId;
+  }
   const star = is_starred !== undefined ? is_starred : isStarred;
   if (star !== undefined) updates.is_starred = star ? 1 : 0;
 
   const updated = db.updateFile(file.id, updates, req.user.id);
+  if (!updated || (fid !== undefined && String(updated.folder_id || '') !== String(updates.folder_id || ''))) {
+    return res.status(409).json({ error: 'File move could not be persisted' });
+  }
   res.json(updated);
 });
 
@@ -1575,18 +1587,27 @@ router.post('/batch-star', (req, res) => {
 
 router.post('/batch-move', (req, res) => {
   const { fileIds = [], folderIds = [], targetFolderId = null } = req.body;
-  const dest = (targetFolderId && targetFolderId !== 'null' && targetFolderId !== 'root') ? targetFolderId : null;
+  const dest = (targetFolderId && targetFolderId !== 'null' && targetFolderId !== 'root') ? String(targetFolderId) : null;
+  if (dest) {
+    const targetFolder = db.getFolderById(dest, req.user.id);
+    if (!targetFolder) return res.status(404).json({ error: 'Destination folder not found' });
+    if (targetFolder.is_trashed) return res.status(400).json({ error: 'Cannot move items into Trash' });
+  }
   let movedFilesCount = 0;
   let movedFoldersCount = 0;
 
   for (const id of fileIds) {
-    db.updateFile(id, { folder_id: dest }, req.user.id);
-    movedFilesCount++;
+    const file = db.getFileById(id, req.user.id);
+    if (!file) continue;
+    const updated = db.updateFile(id, { folder_id: dest }, req.user.id);
+    if (updated && String(updated.folder_id || '') === String(dest || '')) movedFilesCount++;
   }
   for (const id of folderIds) {
     if (dest !== id) {
-      db.updateFolder(id, { parent_id: dest }, req.user.id);
-      movedFoldersCount++;
+      const folder = db.getFolderById(id, req.user.id);
+      if (!folder) continue;
+      const updated = db.updateFolder(id, { parent_id: dest }, req.user.id);
+      if (updated && String(updated.parent_id || '') === String(dest || '')) movedFoldersCount++;
     }
   }
 

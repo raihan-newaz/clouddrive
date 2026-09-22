@@ -349,7 +349,8 @@ const API = {
   },
 
   async moveFile(id, folder_id) {
-    return this.request('PATCH', `/api/files/${id}`, { folder_id });
+    const targetFolderId = (folder_id === undefined || folder_id === null || folder_id === 'null' || folder_id === 'root' || folder_id === '') ? null : String(folder_id);
+    return this.request('PATCH', `/api/files/${id}`, { folder_id: targetFolderId });
   },
 
   async starFile(id, is_starred = true) {
