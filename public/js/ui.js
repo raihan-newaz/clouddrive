@@ -683,6 +683,26 @@ const UI = {
     if (onSelect) onSelect(null);
   },
 
+  // Compact, collapsible tree used by the Move dialog for large folder sets.
+  renderFolderTreeCompact(container, tree, onSelect) {
+    const icon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="var(--accent-color)" aria-hidden="true"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.89 2 1.99 2h16c1.1 0 2-.9 2-2V8c0-1.1-.89-2-1.99-2h-8l-2-2z"/></svg>';
+    const renderNodes = (nodes, depth = 1) => (nodes || []).map(node => {
+      const children = Array.isArray(node.children) ? node.children : [];
+      const name = this.escapeHtml(node.name || '');
+      const toggle = children.length ? '<button type="button" class="tree-toggle" data-tree-toggle aria-expanded="false">›</button>' : '<span class="tree-toggle-spacer" aria-hidden="true"></span>';
+      const nested = children.length ? `<div class="tree-children" hidden>${renderNodes(children, depth + 1)}</div>` : '';
+      return `<div class="tree-node-group"><div class="tree-item" data-folder-id="${String(node.id)}" style="padding-left:${depth * 18}px">${toggle}<span class="tree-icon">${icon}</span><span class="tree-label">${name}</span></div>${nested}</div>`;
+    }).join('');
+    container.innerHTML = `<div class="folder-tree-toolbar"><span class="folder-tree-hint">Choose a destination</span><span class="folder-tree-tools"><button type="button" class="tree-tool-btn" data-tree-expand>Expand all</button><button type="button" class="tree-tool-btn" data-tree-collapse>Collapse all</button></span></div><div class="folder-tree-list"><div class="tree-item active" data-folder-id="null"><span class="tree-toggle-spacer" aria-hidden="true"></span><span class="tree-icon">${icon}</span><span class="tree-label">My Drive (Root)</span></div>${renderNodes(tree)}</div>`;
+    const selectItem = item => { container.querySelectorAll('.tree-item').forEach(i => i.classList.remove('active')); item.classList.add('active'); const id = item.getAttribute('data-folder-id'); if (onSelect) onSelect(id === 'null' ? null : id); };
+    container.querySelectorAll('.tree-item').forEach(item => item.onclick = event => { if (!event.target.closest('.tree-toggle')) selectItem(item); });
+    container.querySelectorAll('[data-tree-toggle]').forEach(toggle => toggle.onclick = event => { event.stopPropagation(); const children = toggle.closest('.tree-node-group')?.querySelector(':scope > .tree-children'); if (!children) return; const expanded = !children.hidden; children.hidden = expanded; toggle.textContent = expanded ? '›' : '⌄'; toggle.setAttribute('aria-expanded', String(!expanded)); });
+    const setAll = expanded => { container.querySelectorAll('.tree-children').forEach(children => { children.hidden = !expanded; }); container.querySelectorAll('[data-tree-toggle]').forEach(toggle => { toggle.textContent = expanded ? '⌄' : '›'; toggle.setAttribute('aria-expanded', String(expanded)); }); };
+    container.querySelector('[data-tree-expand]')?.addEventListener('click', () => setAll(true));
+    container.querySelector('[data-tree-collapse]')?.addEventListener('click', () => setAll(false));
+    if (onSelect) onSelect(null);
+  },
+
   // ─── Show Context Menu ─────────────────────────────────────────────
   showContextMenu(event, item) {
     if (!item) return;

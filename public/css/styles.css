@@ -2895,6 +2895,47 @@ body.dragging .drop-zone-content {
   padding: 8px;
   margin-bottom: 16px;
 }
+.folder-tree-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.folder-tree-tools { display: flex; gap: 6px; }
+.tree-tool-btn {
+  border: 0;
+  background: transparent;
+  color: var(--accent-color);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 4px;
+}
+.tree-tool-btn:hover { text-decoration: underline; }
+.folder-tree-list { min-width: 0; }
+.tree-node-group { min-width: 0; }
+.tree-children { min-width: 0; }
+.tree-toggle, .tree-toggle-spacer {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tree-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+.tree-toggle:hover { background: var(--bg-hover); color: var(--accent-color); }
 .tree-item {
   display: flex;
   align-items: center;

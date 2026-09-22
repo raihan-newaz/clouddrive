@@ -3841,7 +3841,7 @@ const App = {
       UI.showModal('move-modal');
       try {
         const tree = await API.getFolderTree();
-        UI.renderFolderTree(treeContainer, tree, (selectedFolderId) => {
+        UI.renderFolderTreeCompact(treeContainer, tree, (selectedFolderId) => {
           this.targetMoveFolderId = selectedFolderId;
         });
       } catch (e) {
