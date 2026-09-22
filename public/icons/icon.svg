@@ -9,12 +9,10 @@
       <stop offset="100%" stop-color="#1a73e8"/>
     </linearGradient>
   </defs>
-  <!-- App Icon Background -->
-  <rect width="512" height="512" rx="115" fill="url(#bgGrad)"/>
-  <!-- Border outline -->
-  <rect width="508" height="508" x="2" y="2" rx="113" fill="none" stroke="#444746" stroke-width="4"/>
-  <!-- Center Cloud Logo -->
-  <g transform="translate(76, 100) scale(0.7)">
+  <!-- Full-bleed canvas lets iOS apply its own rounded home-screen mask. -->
+  <rect width="512" height="512" fill="url(#bgGrad)"/>
+  <!-- Larger mark, optically shifted upward for the iOS home-screen tile. -->
+  <g transform="translate(51, 50) scale(0.8)">
     <path fill="url(#cloudGrad)" d="M412.8 214.2C398.3 140.6 333.7 85.3 256 85.3c-61.6 0-115.2 34.9-141.8 86.2C49.9 178.3 0 232.7 0 298.7c0 70.6 57.4 128 128 128h277.3c58.9 0 106.7-47.8 106.7-106.7 0-56.3-43.7-101.9-99.2-105.8z"/>
   </g>
 </svg>

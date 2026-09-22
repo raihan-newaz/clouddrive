@@ -1,4 +1,4 @@
-const CACHE_NAME = 'clouddrive-v55';
+const CACHE_NAME = 'clouddrive-v56';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -6,6 +6,7 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/favicon.svg',
   '/icons/icon-180.png',
+  '/icons/apple-touch-icon.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/icon-maskable.png',
