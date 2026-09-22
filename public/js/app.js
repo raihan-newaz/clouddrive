@@ -1794,13 +1794,17 @@ const App = {
 
     // Keep drag state resilient when the browser fires dragend before drop
     // (this can happen when dragging over nested card children).
-    const readDraggedItem = (event) => {
+    const readDraggedItems = (event) => {
       if (this.draggedItem) return this.draggedItem;
       try {
         const raw = event?.dataTransfer?.getData('application/x-clouddrive-item') || event?.dataTransfer?.getData('application/x-discorddrive-item') || event?.dataTransfer?.getData('text/plain');
-        if (raw) return JSON.parse(raw);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed.items)) return parsed.items;
+          return parsed && parsed.id ? [parsed] : [];
+        }
       } catch (_) { /* Ignore browser dataTransfer restrictions. */ }
-      return null;
+      return [];
     };
 
     // 1. Drag Start on File / Folder Cards
@@ -1823,10 +1827,23 @@ const App = {
       };
       if (!item) return;
 
-      this.draggedItem = item;
+      // Dragging one of a selected group must move the entire selected group,
+      // matching desktop file managers. A non-selected card remains a single
+      // item drag and does not disturb the user's current selection.
+      const selectedItems = UI.selectedItems.has(String(id)) && UI.selectedItems.size > 1
+        ? Array.from(UI.selectedItems.values()).map(selected => ({
+          id: selected.id,
+          type: selected.type,
+          name: selected.item?.name || selected.id,
+          folder_id: selected.item?.folder_id,
+          parent_id: selected.item?.parent_id
+        }))
+        : [{ id: item.id, type: item.type, name: item.name, folder_id: item.folder_id, parent_id: item.parent_id }];
+
+      this.draggedItem = selectedItems;
       this.draggedCardElement = card;
 
-      const transferItem = JSON.stringify({ id: item.id, type: item.type, name: item.name });
+      const transferItem = JSON.stringify({ items: selectedItems });
       e.dataTransfer.setData('application/x-clouddrive-item', transferItem);
       // text/plain keeps the move payload available in browsers that restrict
       // custom drag MIME types between nested elements.
@@ -1850,14 +1867,14 @@ const App = {
 
     // 3. Drag Over / Enter on Folder Cards
     const allowFolderDrop = (e) => {
-      const draggedItem = readDraggedItem(e);
-      if (!draggedItem) return;
+      const draggedItems = readDraggedItems(e);
+      if (draggedItems.length === 0) return;
       const folderCard = e.target.closest('.folder-card');
       if (!folderCard) return;
 
       const targetFolderId = folderCard.getAttribute('data-id');
       // Cannot move folder into itself
-      if (draggedItem.type === 'folder' && String(draggedItem.id) === String(targetFolderId)) {
+      if (draggedItems.some(item => item.type === 'folder' && String(item.id) === String(targetFolderId))) {
         return;
       }
 
@@ -1879,8 +1896,8 @@ const App = {
     // 4. Drop on Folder Card
     fileContainer.addEventListener('drop', async (e) => {
       const folderCard = e.target.closest('.folder-card');
-      const draggedItem = readDraggedItem(e);
-      if (!folderCard || !draggedItem) return;
+      const draggedItems = readDraggedItems(e);
+      if (!folderCard || draggedItems.length === 0) return;
 
       e.preventDefault();
       e.stopPropagation();
@@ -1890,13 +1907,13 @@ const App = {
       const targetFolder = this.foldersMap.get(targetFolderId);
       const targetName = targetFolder ? targetFolder.name : 'Folder';
 
-      await this.executeMove(draggedItem, targetFolderId, targetName);
+      await this.executeMove(draggedItems, targetFolderId, targetName);
     });
 
     // 5. Drop on Breadcrumb Ancestor Folders
     if (breadcrumb) {
       breadcrumb.addEventListener('dragover', (e) => {
-        if (!readDraggedItem(e)) return;
+        if (readDraggedItems(e).length === 0) return;
         const bItem = e.target.closest('a.breadcrumb-item');
         if (!bItem) return;
 
@@ -1918,8 +1935,8 @@ const App = {
 
       breadcrumb.addEventListener('drop', async (e) => {
         const bItem = e.target.closest('a.breadcrumb-item');
-        const draggedItem = readDraggedItem(e);
-        if (!bItem || !draggedItem) return;
+        const draggedItems = readDraggedItems(e);
+        if (!bItem || draggedItems.length === 0) return;
 
         e.preventDefault();
         e.stopPropagation();
@@ -1929,14 +1946,14 @@ const App = {
         const targetFolderId = (rawId && rawId !== 'null' && rawId !== '') ? rawId : null;
         const targetName = bItem.textContent.trim() || 'My Drive';
 
-        await this.executeMove(draggedItem, targetFolderId, targetName);
+        await this.executeMove(draggedItems, targetFolderId, targetName);
       });
     }
 
     // 6. Drop on Sidebar "My Drive" (Root)
     if (driveNavItem) {
       driveNavItem.addEventListener('dragover', (e) => {
-        if (!readDraggedItem(e) || this.currentFolderId === null) return;
+        if (readDraggedItems(e).length === 0 || this.currentFolderId === null) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         driveNavItem.classList.add('drag-over');
@@ -1949,27 +1966,23 @@ const App = {
       });
 
       driveNavItem.addEventListener('drop', async (e) => {
-        const draggedItem = readDraggedItem(e);
-        if (!draggedItem || this.currentFolderId === null) return;
+        const draggedItems = readDraggedItems(e);
+        if (draggedItems.length === 0 || this.currentFolderId === null) return;
         e.preventDefault();
         e.stopPropagation();
         driveNavItem.classList.remove('drag-over');
-        await this.executeMove(draggedItem, null, 'My Drive');
+        await this.executeMove(draggedItems, null, 'My Drive');
       });
     }
   },
 
-  async executeMove(item, targetFolderId, targetFolderName) {
-    if (!item) return;
-
-    const itemId = String(item.id);
+  async executeMove(items, targetFolderId, targetFolderName) {
+    const moveItems = Array.isArray(items) ? items : (items ? [items] : []);
+    if (moveItems.length === 0) return;
     const destinationId = targetFolderId === undefined || targetFolderId === null || targetFolderId === 'null' || targetFolderId === 'root' || targetFolderId === '' ? null : String(targetFolderId);
 
-    if (item.type === 'folder' && itemId === destinationId) {
+    if (moveItems.some(item => item.type === 'folder' && String(item.id) === destinationId)) {
       UI.showToast('Cannot move a folder into itself', 'warning');
-      return;
-    }
-    if (item.type === 'file' && String(item.folder_id || '') === String(destinationId || '')) {
       return;
     }
 
@@ -1978,13 +1991,21 @@ const App = {
         this.draggedCardElement.classList.add('move-out');
       }
 
-      if (item.type === 'folder') {
-        await API.moveFolder(item.id, destinationId);
+      if (moveItems.length > 1) {
+        const fileIds = moveItems.filter(item => item.type === 'file').map(item => item.id);
+        const folderIds = moveItems.filter(item => item.type === 'folder').map(item => item.id);
+        await API.batchMove(fileIds, folderIds, destinationId);
+        UI.showToast(`Moved ${moveItems.length} items to "${targetFolderName}"`, 'success');
       } else {
-        await API.moveFile(item.id, destinationId);
+        const item = moveItems[0];
+        if (item.type === 'folder') {
+          await API.moveFolder(item.id, destinationId);
+        } else {
+          await API.moveFile(item.id, destinationId);
+        }
+        UI.showToast(`Moved "${item.name}" to "${targetFolderName}"`, 'success');
       }
-
-      UI.showToast(`Moved "${item.name}" to "${targetFolderName}"`, 'success');
+      UI.clearSelection();
 
       setTimeout(() => {
         this.refreshCurrentView();
