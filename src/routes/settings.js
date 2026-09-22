@@ -478,10 +478,29 @@ router.post('/telegram/purge-known', adminOnly, async (req, res) => {
     const confirm = clean(req.body && req.body.confirmation);
     if (confirm !== 'DELETE_ALL_TELEGRAM_MESSAGES') return res.status(400).json({ error: 'Type DELETE_ALL_TELEGRAM_MESSAGES to confirm' });
     if (!password || !(await bcrypt.compare(password, req.user.password_hash || req.user.password || ''))) return res.status(401).json({ error: 'Invalid admin password' });
-    const replicas = [];
-    for (const file of db.getAllFiles(null, true) || []) replicas.push(...(db.getFileReplicas(file.id) || []).filter(r => r.provider === 'telegram'));
-    if (replicas.length) await storageManager.deleteChunksBulk(replicas);
-    res.json({ success: true, deleted: replicas.length, message: 'Known CloudDrive Telegram messages deleted. External messages require the user-session purge tool.' });
+    const replicaIds = new Set();
+    for (const file of db.getAllFiles(null, true) || []) {
+      for (const replica of db.getFileReplicas(file.id) || []) {
+        if (replica.provider === 'telegram' && replica.remote_id) replicaIds.add(String(replica.remote_id));
+      }
+    }
+    const replicas = [...replicaIds].map(remote_id => ({ provider: 'telegram', remote_id }));
+    if (replicas.length === 0) {
+      return res.json({ success: true, deleted: 0, message: 'No CloudDrive Telegram uploads are recorded in this database.' });
+    }
+
+    // Cleanup must still work while Telegram uploads are in Standby mode. The
+    // database records remain untouched so CloudDrive never loses metadata on
+    // a failed or partial remote deletion.
+    const outcomes = await storageManager.deleteChunksBulk(replicas, { forceConnect: true });
+    const result = outcomes.find(outcome => outcome.provider === 'telegram');
+    if (!result || !result.success) {
+      const detail = result?.error || 'Telegram did not confirm the deletion';
+      db.logAuditEvent({ userId: req.user.id, userEmail: req.user.email, action: 'TELEGRAM_UPLOAD_PURGE_FAILED', details: { attempted: replicas.length, error: detail }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
+      return res.status(502).json({ error: `Telegram cleanup failed: ${detail}`, attempted: replicas.length, deleted: 0 });
+    }
+    db.logAuditEvent({ userId: req.user.id, userEmail: req.user.email, action: 'TELEGRAM_UPLOADS_PURGED', details: { deleted: result.deleted }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
+    res.json({ success: true, deleted: result.deleted, message: `${result.deleted} CloudDrive Telegram upload${result.deleted === 1 ? '' : 's'} deleted. CloudDrive file records were kept unchanged.` });
   } catch (err) { res.status(500).json({ error: 'Telegram cleanup failed: ' + err.message }); }
 });
 

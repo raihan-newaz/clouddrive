@@ -293,8 +293,8 @@ class StorageManager {
    * Bulk deletes chunks across all provider replicas efficiently
    * @param {Array<{ provider: string, remote_id: string }>} replicas
    */
-  async deleteChunksBulk(replicas) {
-    if (!replicas || replicas.length === 0) return;
+  async deleteChunksBulk(replicas, options = {}) {
+    if (!replicas || replicas.length === 0) return [];
 
     // Group replicas by provider
     const byProvider = {};
@@ -306,23 +306,32 @@ class StorageManager {
       byProvider[replica.provider].push(replica.remote_id);
     }
 
-    for (const [providerName, remoteIds] of Object.entries(byProvider)) {
+    const results = [];
+    for (const [providerName, rawRemoteIds] of Object.entries(byProvider)) {
+      const remoteIds = [...new Set(rawRemoteIds)];
       try {
         const provider = this.getProvider(providerName);
         if (!provider.isInitialized) {
-          await provider.initialize().catch(() => {});
+          const initialized = await provider.initialize({ forceConnect: options.forceConnect === true });
+          if (!initialized) throw new Error(`${providerName} is not connected`);
         }
+        let success = true;
         if (typeof provider.deleteChunks === 'function') {
-          await provider.deleteChunks(remoteIds);
+          success = await provider.deleteChunks(remoteIds);
         } else {
           for (const id of remoteIds) {
-            await provider.deleteChunk(id).catch(() => {});
+            const deleted = await provider.deleteChunk(id);
+            if (!deleted) success = false;
           }
         }
+        if (!success) throw new Error(`${providerName} rejected one or more delete requests`);
+        results.push({ provider: providerName, attempted: remoteIds.length, deleted: remoteIds.length, success: true });
       } catch (err) {
         console.warn(`[StorageManager] Bulk delete error for provider "${providerName}":`, err.message);
+        results.push({ provider: providerName, attempted: remoteIds.length, deleted: 0, success: false, error: err.message });
       }
     }
+    return results;
   }
 
   /**

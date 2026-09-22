@@ -6905,7 +6905,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const password = window.prompt('Admin password:'); if (!password) return;
     const confirmation = window.prompt('Type DELETE_ALL_TELEGRAM_MESSAGES to permanently delete CloudDrive Telegram uploads:');
     if (confirmation !== 'DELETE_ALL_TELEGRAM_MESSAGES') return window.alert('Cancelled. Nothing was deleted.');
-    const response = await fetch('/api/settings/telegram/purge-known', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, confirmation }) });
-    const data = await response.json().catch(() => ({})); window.alert(data.message || data.error || 'Cleanup failed');
+    purge.disabled = true;
+    const originalLabel = purge.textContent;
+    purge.textContent = 'Deleting Telegram uploads…';
+    try {
+      const response = await fetch('/api/settings/telegram/purge-known', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, confirmation }) });
+      const data = await response.json().catch(() => ({}));
+      window.alert(data.message || data.error || 'Cleanup failed');
+    } catch (error) {
+      window.alert(`Cleanup request failed: ${error.message}`);
+    } finally {
+      purge.disabled = false;
+      purge.textContent = originalLabel;
+    }
   });
 });
