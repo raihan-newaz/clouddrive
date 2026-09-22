@@ -5039,6 +5039,14 @@ body.dragging .drop-zone-content {
 }
 .cache-action-buttons { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
 @media (max-width: 680px) { .cache-action-buttons { width:100%; }.cache-action-buttons button { flex:1 1 170px; } }
+.account-sessions-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:16px 0 9px; }
+.account-sessions-head strong,.account-sessions-head small { display:block; }.account-sessions-head strong { font-size:13px; }.account-sessions-head small { margin-top:3px; color:var(--text-secondary); font-size:12px; }
+.account-device-list { display:grid; gap:8px; max-height:310px; overflow:auto; padding-right:2px; }
+.account-device-row { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:11px; padding:11px 12px; border:1px solid var(--border-color); border-radius:10px; background:var(--bg-secondary); }
+.account-device-icon { display:grid; place-items:center; width:34px; height:34px; border-radius:9px; color:var(--accent-color); background:color-mix(in srgb,var(--accent-color) 12%,transparent); font-size:15px; }
+.account-device-copy { min-width:0; }.account-device-title { display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:13px; font-weight:650; }.account-device-copy small { display:block; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-secondary); font-size:11.5px; }
+.account-device-current { padding:2px 6px; border-radius:999px; color:#34d399; background:rgba(16,185,129,.12); font-size:10px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; }.account-device-revoked { color:#fda4af; background:rgba(244,63,94,.12); }
+@media (max-width: 560px) { .account-device-row { grid-template-columns:auto minmax(0,1fr); }.account-device-row > button { grid-column:1 / -1; width:100%; }.account-sessions-head { align-items:flex-start; } }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 /* GOOGLE DRIVE STYLE SHARE MODAL                                            */

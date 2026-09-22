@@ -85,7 +85,7 @@ class SessionTracker {
   /**
    * Track User Login Session
    */
-  track(userId, req, sessionId = null) {
+  track(userId, req, sessionId = null, username = null) {
     if (!userId) return;
     const ip = this.getClientIp(req);
     const userAgent = req.headers['user-agent'] || 'Unknown';
@@ -94,11 +94,24 @@ class SessionTracker {
       userAgent,
       lastSeen: Date.now()
     });
-    if (sessionId && this.browserSessions.has(sessionId)) {
-      const session = this.browserSessions.get(sessionId);
+    if (sessionId) {
+      let session = this.browserSessions.get(sessionId);
+      // Browser session metadata is held in memory. Recreate its lightweight
+      // record after a server restart while the signed-in token is still valid.
+      if (!session) {
+        const parsed = this.parseDevice(userAgent);
+        session = {
+          id: sessionId, type: 'browser', userId, username: username || 'Unknown user',
+          ip, userAgent, clientName: parsed.clientName, osType: parsed.osType,
+          connectedAt: new Date().toISOString(), lastActive: Date.now(),
+          lastAction: 'Session restored', requestCount: 0, revoked: false
+        };
+        this.browserSessions.set(sessionId, session);
+      }
       session.lastActive = Date.now();
       session.ip = ip;
       session.userAgent = userAgent;
+      session.requestCount = (session.requestCount || 0) + 1;
     }
   }
 

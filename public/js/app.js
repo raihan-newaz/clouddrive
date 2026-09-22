@@ -4681,6 +4681,9 @@ const App = {
       };
     }
 
+    const refreshAccountSessions = document.getElementById('btn-refresh-account-sessions');
+    if (refreshAccountSessions) refreshAccountSessions.onclick = () => this.loadAccountSessions();
+
     const btnPurgeBrowserCache = document.getElementById('btn-purge-browser-cache');
     if (btnPurgeBrowserCache) {
       btnPurgeBrowserCache.onclick = async () => {
@@ -5543,7 +5546,53 @@ const App = {
     }
 
     // Fetch and populate live settings data
-    await this.loadSettings();
+    await Promise.all([this.loadSettings(), this.loadAccountSessions()]);
+  },
+
+  async loadAccountSessions() {
+    const list = document.getElementById('account-device-sessions');
+    const summary = document.getElementById('account-session-summary');
+    if (!list || !summary) return;
+    try {
+      const result = await API.getAccountSessions();
+      const sessions = result.sessions || [];
+      const activeCount = sessions.filter(session => !session.revoked).length;
+      summary.textContent = `${activeCount} ${activeCount === 1 ? 'device' : 'devices'} connected to this account`;
+      if (!sessions.length) {
+        list.innerHTML = '<span class="hint">No active devices recorded yet. This browser will appear after its next authenticated request.</span>';
+        return;
+      }
+      const icon = session => session.type === 'webdav' ? '◫' : (session.osType === 'apple' ? '●' : session.osType === 'android' ? '◉' : '◌');
+      list.innerHTML = sessions.map(session => {
+        const lastActive = session.lastActive ? new Date(session.lastActive).toLocaleString() : 'Unknown';
+        const state = session.revoked ? '<span class="account-device-current account-device-revoked">Signed out</span>' : (session.isCurrent ? '<span class="account-device-current">This device</span>' : '');
+        const action = session.revoked ? '' : `<button type="button" class="btn-secondary btn-sm account-session-revoke" data-session-id="${UI.escapeHtml(session.id)}" data-current="${session.isCurrent ? '1' : '0'}">${session.isCurrent ? 'Log out' : 'Log out device'}</button>`;
+        return `<div class="account-device-row"><span class="account-device-icon" aria-hidden="true">${icon(session)}</span><div class="account-device-copy"><div class="account-device-title">${UI.escapeHtml(session.clientName || 'Device')}${state}</div><small>${UI.escapeHtml(session.type === 'webdav' ? 'WebDAV' : 'Browser')} · ${UI.escapeHtml(session.ip || '—')} · Last active ${UI.escapeHtml(lastActive)}</small></div>${action}</div>`;
+      }).join('');
+      list.querySelectorAll('.account-session-revoke').forEach(button => {
+        button.onclick = async () => {
+          button.disabled = true;
+          try {
+            const response = await API.revokeAccountSession(button.dataset.sessionId);
+            UI.showToast(response.message || 'Device signed out', 'success');
+            if (response.isCurrent || button.dataset.current === '1') {
+              this.unlockedFolders.clear();
+              sessionStorage.clear();
+              UI.hideAllModals();
+              this.showScreen('login');
+            } else {
+              await this.loadAccountSessions();
+            }
+          } catch (error) {
+            UI.showToast(error.message || 'Unable to sign out device', 'error');
+            button.disabled = false;
+          }
+        };
+      });
+    } catch (error) {
+      summary.textContent = 'Unable to load connected devices';
+      list.innerHTML = `<span class="hint">${UI.escapeHtml(error.message || 'Unable to load device sessions.')}</span>`;
+    }
   },
 
   async loadSettings() {

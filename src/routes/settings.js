@@ -833,6 +833,40 @@ router.get('/webdav/sessions', (req, res) => {
   }
 });
 
+// Account settings always show only the signed-in user's own browser and
+// WebDAV devices, including for administrators.
+function isOwnSession(session, user) {
+  return String(session?.userId || '') === String(user.id) || String(session?.username || '').toLowerCase() === String(user.email || '').toLowerCase();
+}
+
+router.get('/account-sessions', (req, res) => {
+  try {
+    const sessions = sessionTracker.getActiveSessions()
+      .filter(session => isOwnSession(session, req.user))
+      .map(session => ({
+        id: session.id, type: session.type, clientName: session.clientName || (session.type === 'browser' ? 'Web browser' : 'Device'),
+        osType: session.osType || 'generic', ip: session.ip || '—', connectedAt: session.connectedAt,
+        lastActive: session.lastActive, lastAction: session.lastAction || 'Active', status: session.status,
+        isOnline: Boolean(session.isOnline), isCurrent: session.id === req.authSessionId, revoked: Boolean(session.revoked)
+      }));
+    res.json({ success: true, sessions });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load account sessions' });
+  }
+});
+
+router.post('/account-sessions/:id/revoke', (req, res) => {
+  try {
+    const session = sessionTracker.getActiveSessions().find(item => item.id === req.params.id);
+    if (!session || !isOwnSession(session, req.user)) return res.status(404).json({ error: 'Device session not found' });
+    sessionTracker.revokeSession(session.id);
+    db.logAuditEvent({ userId: req.user.id, userEmail: req.user.email, action: 'ACCOUNT_DEVICE_REVOKED', details: { sessionId: session.id, type: session.type, clientName: session.clientName }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
+    res.json({ success: true, isCurrent: session.id === req.authSessionId, message: 'Device session signed out.' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to sign out device session' });
+  }
+});
+
 // Revoke: admin can revoke any; user can only revoke their own sessions
 router.post('/webdav/sessions/revoke', (req, res) => {
   try {

@@ -612,6 +612,14 @@ const API = {
     return this.request('POST', '/api/settings/clear-cache');
   },
 
+  async getAccountSessions() {
+    return this.request('GET', '/api/settings/account-sessions');
+  },
+
+  async revokeAccountSession(sessionId) {
+    return this.request('POST', `/api/settings/account-sessions/${encodeURIComponent(sessionId)}/revoke`);
+  },
+
   async runSpeedTest() {
     return this.request('POST', '/api/settings/speedtest');
   },

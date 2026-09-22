@@ -41,7 +41,7 @@ function authMiddleware(req, res, next) {
 
     req.user = user;
     req.authSessionId = decoded.sid || null;
-    sessionTracker.track(user.id, req, decoded.sid);
+    sessionTracker.track(user.id, req, decoded.sid, user.email);
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired authentication token' });
