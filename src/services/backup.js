@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const initSqlJs = require('sql.js');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const crypto = require('../crypto');
@@ -9,6 +10,36 @@ const { notifySecurityEvent } = require('./notificationService');
 
 let backupInterval = null;
 let isBackingUp = false;
+
+function isSqliteDatabase(filePath) {
+  if (!fs.existsSync(filePath)) return false;
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const header = Buffer.alloc(16);
+    const bytesRead = fs.readSync(fd, header, 0, header.length, 0);
+    return bytesRead === 16 && header.equals(Buffer.from('SQLite format 3\0', 'binary'));
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+async function isValidDatabaseBackup(filePath) {
+  if (!isSqliteDatabase(filePath)) return false;
+  let candidate = null;
+  try {
+    const SQL = await initSqlJs();
+    candidate = new SQL.Database(fs.readFileSync(filePath));
+    const integrity = candidate.exec('PRAGMA quick_check');
+    const tableCheck = candidate.exec("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('users', 'files', 'folders')");
+    return integrity.length === 1 && integrity[0].values.length > 0 &&
+      integrity[0].values.every(row => String(row[0]).toLowerCase() === 'ok') &&
+      tableCheck.length === 1 && Number(tableCheck[0].values[0]?.[0]) === 3;
+  } catch (_) {
+    return false;
+  } finally {
+    if (candidate) candidate.close();
+  }
+}
 
 async function performDatabaseBackup(userId = null, targetProvider = 'all') {
   if (isBackingUp) throw new Error('Backup already in progress');
@@ -21,18 +52,17 @@ async function performDatabaseBackup(userId = null, targetProvider = 'all') {
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupFileName = `clouddrive-backup-${timestamp}.db.enc`;
-  const tempEncPath = path.join(config.TMP_DIR, backupFileName);
+  const backupFileName = `clouddrive-backup-${timestamp}.db`;
+  const tempBackupPath = path.join(config.TMP_DIR, backupFileName);
 
   try {
-    await crypto.encryptFile(
-      dbPath,
-      tempEncPath,
-      config.ENCRYPTION_KEY,
-      'db-backup'
-    );
-
-    const stats = fs.statSync(tempEncPath);
+    // Make one synchronous SQLite snapshot so later requests cannot change
+    // the bytes while the cloud provider is uploading the file.
+    fs.copyFileSync(dbPath, tempBackupPath);
+    if (!await isValidDatabaseBackup(tempBackupPath)) {
+      throw new Error('Current database snapshot failed SQLite integrity/schema validation; no backup was uploaded');
+    }
+    const stats = fs.statSync(tempBackupPath);
 
     const isDiscordEnabled = db.getSetting('discord_enabled') !== 'false';
     const isTelegramEnabled = db.getSetting('telegram_enabled') !== 'false';
@@ -59,7 +89,7 @@ async function performDatabaseBackup(userId = null, targetProvider = 'all') {
 
     for (const prov of providersToUpload) {
       try {
-        const remoteResult = await storageManager.uploadChunk(prov, tempEncPath, backupFileName);
+        const remoteResult = await storageManager.uploadChunk(prov, tempBackupPath, backupFileName);
         const backupRecord = {
           id: uuidv4(),
           user_id: userId,
@@ -85,7 +115,7 @@ async function performDatabaseBackup(userId = null, targetProvider = 'all') {
       }
     }
 
-    try { fs.unlinkSync(tempEncPath); } catch (e) {}
+    try { fs.unlinkSync(tempBackupPath); } catch (e) {}
 
     if (uploadedRecords.length === 0) {
       throw new Error(`Failed to upload backup to any cloud provider: ${lastError ? lastError.message : 'Unknown error'}`);
@@ -96,11 +126,11 @@ async function performDatabaseBackup(userId = null, targetProvider = 'all') {
       success: true,
       backups: uploadedRecords,
       backup: uploadedRecords[0],
-      message: `Cloud backup created and encrypted successfully on ${provNames}!`
+      message: `Plain database backup created successfully on ${provNames}!`
     };
   } catch (err) {
-    if (fs.existsSync(tempEncPath)) {
-      try { fs.unlinkSync(tempEncPath); } catch (e) {}
+    if (fs.existsSync(tempBackupPath)) {
+      try { fs.unlinkSync(tempBackupPath); } catch (e) {}
     }
     console.error('[BackupService] Database backup failed:', err.message);
     notifySecurityEvent('Backup failure', { scope: userId ? 'user backup' : 'database backup', provider: targetProvider, error: err.message });
@@ -130,7 +160,7 @@ async function restoreBackup(remoteId, providerName = null) {
   }
 
   try {
-    console.log(`[BackupService] Downloading encrypted backup #${remoteId}...`);
+    console.log(`[BackupService] Downloading database backup #${remoteId}...`);
     let downloaded = false;
     let lastErr = null;
 
@@ -168,8 +198,15 @@ async function restoreBackup(remoteId, providerName = null) {
       throw new Error(`Failed to download backup file from storage providers: ${lastErr ? lastErr.message : 'No enabled provider available'}`);
     }
 
-    console.log('[BackupService] Decrypting backup file...');
-    await crypto.decryptFile(encPath, decPath, config.ENCRYPTION_KEY, null, null, 'db-backup');
+    if (isSqliteDatabase(encPath)) {
+      fs.copyFileSync(encPath, decPath);
+      console.log('[BackupService] Plain SQLite backup detected; skipping decryption.');
+    } else {
+      console.log('[BackupService] Legacy encrypted backup detected; decrypting it.');
+      await crypto.decryptFile(encPath, decPath, config.ENCRYPTION_KEY, null, null, 'db-backup');
+    }
+
+    if (!await isValidDatabaseBackup(decPath)) throw new Error('Backup failed SQLite integrity/schema validation; active database was not replaced');
 
     // Create safety backup of active db
     if (fs.existsSync(activeDbPath)) {
@@ -454,6 +491,7 @@ function startAutomatedBackups() {
 module.exports = {
   performDatabaseBackup,
   createEncryptedBackup: performDatabaseBackup,
+  isValidDatabaseBackup,
   performUserBackup,
   restoreBackup,
   restoreBackupFromDiscord,

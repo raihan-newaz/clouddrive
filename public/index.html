@@ -2086,7 +2086,7 @@
       <div class="settings-section">
         <div class="settings-section-title">
           <h4>Multi-Cloud Automated Backups (Discord & Telegram)</h4>
-          <p>Automatic 24-hour AES-256-GCM encrypted database snapshots uploaded directly to your private Discord and Telegram cloud channels.</p>
+          <p>Automatic 24-hour plaintext SQLite database snapshots are uploaded to your Discord and Telegram channels. Anyone with access to those channels can read the database contents, so keep channel access tightly restricted.</p>
         </div>
         <div class="cache-action-box">
           <div>
@@ -2129,12 +2129,12 @@
       <div class="settings-section">
         <div class="settings-section-title">
           <h4>Import / Restore Database File</h4>
-          <p>Restore from an encrypted backup (<code>.enc.db</code>) or a raw database (<code>.db</code>) with automatic AES-256 decryption & integrity validation.</p>
+          <p>Restore a plaintext SQLite database (<code>.db</code>) or a legacy encrypted backup (<code>.enc.db</code>). CloudDrive validates database integrity before replacing the active database.</p>
         </div>
         <div class="cache-action-box">
           <div>
             <strong>Upload Backup File (.enc.db / .db)</strong>
-            <p>Select any previous <code>.enc.db</code> or <code>.db</code> file to decrypt and restore immediately.</p>
+            <p>Plain <code>.db</code> files are restored directly; legacy <code>.enc.db</code> files are decrypted with the server backup key first.</p>
           </div>
           <div style="display: flex; gap: 8px;">
             <input type="file" id="import-db-file" accept=".enc.db,.db,.sqlite" style="display:none;">

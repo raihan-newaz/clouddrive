@@ -544,7 +544,13 @@ router.post('/import-db', upload.single('database'), async (req, res) => {
 
     // If .db or .sqlite and user is Admin
     if (isAdmin && (originalName.endsWith('.db') || originalName.endsWith('.sqlite'))) {
+      if (!await backupService.isValidDatabaseBackup(filePath)) {
+        fs.unlinkSync(filePath);
+        return res.status(400).json({ error: 'The uploaded file is not a valid CloudDrive SQLite database; the active database was not changed.' });
+      }
       const dbPath = path.join(config.DATA_DIR, 'clouddrive.db');
+      const safetyPath = `${dbPath}.bak`;
+      if (fs.existsSync(dbPath)) fs.copyFileSync(dbPath, safetyPath);
       fs.copyFileSync(filePath, dbPath);
       fs.unlinkSync(filePath);
       await db.initialize();
@@ -569,7 +575,12 @@ router.post('/import-db', upload.single('database'), async (req, res) => {
           });
         } catch (e) {
           if (isAdmin) {
+            if (!await backupService.isValidDatabaseBackup(tempDecPath)) {
+              throw new Error('The decrypted file is not a valid CloudDrive SQLite database; the active database was not changed');
+            }
             const dbPath = path.join(config.DATA_DIR, 'clouddrive.db');
+            const safetyPath = `${dbPath}.bak`;
+            if (fs.existsSync(dbPath)) fs.copyFileSync(dbPath, safetyPath);
             fs.copyFileSync(tempDecPath, dbPath);
             if (fs.existsSync(tempDecPath)) fs.unlinkSync(tempDecPath);
             if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
