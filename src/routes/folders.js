@@ -5,6 +5,7 @@ const db = require('../db');
 const authMiddleware = require('../middleware/auth');
 const eventBroadcaster = require('../services/eventBroadcaster');
 const { generateFolderToken, verifyFolderToken } = require('../securityTokens');
+const userSharing = require('../services/userSharing');
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -388,14 +389,17 @@ router.post('/:id/unlock', async (req, res) => {
 // Delete Folder (Soft or Permanent)
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
-  const folder = db.getFolderById(id, req.user.id);
+  const folder = db.getFolderById(id);
   if (!folder) return res.status(404).json({ error: 'Folder not found' });
+  const permission = userSharing.getFolderPermission(req.user.id, folder, 'delete');
+  if (!permission) return res.status(403).json({ error: 'Delete permission is not available for this shared folder' });
+  if (!permission.isOwner && req.query.permanent === 'true') return res.status(403).json({ error: 'Shared folders can only be moved to the owner’s Trash' });
   if (!requireUnlockedFolder(req, res, folder)) return;
 
   const isPermanent = req.query.permanent === 'true';
   const result = isPermanent ?
-    await permanentlyDeleteFolderRecursive(id, req.user.id) :
-    await deleteFolderRecursive(id, req.user.id);
+    await permanentlyDeleteFolderRecursive(id, folder.user_id) :
+    await deleteFolderRecursive(id, folder.user_id);
 
   res.json({ success: true, ...result });
 });

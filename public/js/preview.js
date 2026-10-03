@@ -92,6 +92,9 @@ const Preview = {
     const shareBtn = document.getElementById('preview-share');
     const closeBtn = document.getElementById('preview-close');
 
+    if (downloadBtn) downloadBtn.style.display = file.shared && !file.can_download ? 'none' : '';
+    if (shareBtn) shareBtn.style.display = file.shared ? 'none' : '';
+
     if (!overlay || !contentEl) return;
 
     overlay.style.display = 'flex';

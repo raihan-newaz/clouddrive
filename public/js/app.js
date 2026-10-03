@@ -4,6 +4,7 @@
 const App = {
   currentView: 'drive', // 'drive', 'starred', 'recent', 'trash', 'settings'
   currentFolderId: null,
+  currentSharedGrantId: null,
   viewMode: localStorage.getItem('discorddrive_view_mode') || 'grid',
   sortBy: localStorage.getItem('discorddrive_sort_by') || 'name',
   sortOrder: localStorage.getItem('discorddrive_sort_order') || (localStorage.getItem('discorddrive_sort_by') === 'date' ? 'desc' : 'asc'),
@@ -78,6 +79,7 @@ const App = {
         ['DragAndDropMove', () => this.initDragAndDropMove()],
         ['ContextMenu', () => this.initContextMenu()],
         ['Modals', () => this.initModals()],
+        ['UserShareModal', () => this.initUserShareModal()],
         ['ShareModal', () => this.initShareModal()],
         ['Upload', () => this.initUpload()],
         ['Settings', () => this.initSettings()],
@@ -234,6 +236,9 @@ const App = {
     if (pathname === '/admin-center' || urlParams.get('view') === 'admin-center' || hash === '#admin-center') {
       return { view: 'admin-center', folderId: null };
     }
+    if (pathname === '/shared' || urlParams.get('view') === 'shared' || hash === '#view=shared' || hash === '#shared') {
+      return { view: 'shared', folderId: null };
+    }
     if (pathname === '/storage' || urlParams.get('view') === 'storage' || hash === '#view=storage' || hash === '#storage') {
       return { view: 'storage', folderId: null };
     }
@@ -252,6 +257,18 @@ const App = {
 
   async navigateToFolder(folderId, updateUrl = true) {
     const fid = (folderId && folderId !== 'null') ? String(folderId) : null;
+    if (this.currentView === 'shared') {
+      if (!fid) return this.navigateToView('shared', updateUrl);
+      if (fid.startsWith('shared-root:')) this.currentSharedGrantId = fid.slice('shared-root:'.length);
+      else {
+        const sharedFolder = this.foldersMap.get(fid);
+        if (sharedFolder?._shareGrantId) this.currentSharedGrantId = sharedFolder._shareGrantId;
+      }
+      this.currentFolderId = fid;
+      UI.clearSelection();
+      if (updateUrl && window.location.pathname !== '/shared') window.history.pushState({ view: 'shared' }, '', '/shared');
+      return this.loadSharedContents(this.currentSharedGrantId, fid);
+    }
     if (this.currentView === 'trash') {
       this.currentFolderId = fid;
       UI.clearSelection();
@@ -324,6 +341,11 @@ const App = {
     switch (view) {
       case 'drive':
         await this.navigateToFolder(null, false);
+        break;
+      case 'shared':
+        this.currentSharedGrantId = null;
+        this.currentFolderId = null;
+        await this.loadSharedEntries();
         break;
       case 'starred':
         await this.loadStarredFiles();
@@ -1114,6 +1136,8 @@ const App = {
     const foldersGrid = document.getElementById('folders-grid');
     const filesGrid = document.getElementById('files-grid');
     const emptyState = document.getElementById('empty-state');
+    const shareActions = document.getElementById('shared-drive-actions');
+    if (shareActions) shareActions.style.display = (this.currentView === 'drive' && !this.currentFolderId) ? 'flex' : 'none';
 
     // Update Trash Banner visibility
     const trashBanner = document.getElementById('trash-banner');
@@ -2019,6 +2043,13 @@ const App = {
   // ─── Actions ───────────────────────────────────────────────────────
   async handleItemAction(action, itemData) {
     if (!itemData) return;
+    if (itemData.shared) {
+      const allowed = action === 'preview' || (action === 'download' && itemData.can_download) || (action === 'trash' && itemData.can_delete);
+      if (!allowed) {
+        UI.showToast(action === 'download' ? 'The owner has not allowed downloads.' : 'This action is not available for shared items.', 'warning');
+        return;
+      }
+    }
 
     if (action === 'preview') {
       if (itemData.type === 'folder') {
@@ -2075,6 +2106,7 @@ const App = {
         try {
           await API.trashFile(itemData.id);
           UI.showToast('Moved to Trash', 'info');
+          if (this.currentView === 'shared') await this.loadSharedEntries();
         } catch (e) {
           UI.showToast('Failed to trash file: ' + e.message, 'error');
           this.refreshCurrentView();
@@ -2095,6 +2127,7 @@ const App = {
         try {
           await API.deleteFolder(itemData.id);
           UI.showToast('Folder moved to Trash', 'info');
+          if (this.currentView === 'shared') await this.loadSharedEntries();
         } catch (e) {
           UI.showToast('Failed to move folder to trash: ' + e.message, 'error');
           this.refreshCurrentView();
@@ -2453,6 +2486,68 @@ const App = {
     }
   },
 
+  pendingUserShareResources: [],
+
+  async openUserShareModal(resources = null, manageOnly = false) {
+    const items = resources || Array.from(UI.selectedItems.values()).map(selected => selected.item).filter(Boolean);
+    this.pendingUserShareResources = items.map(item => ({ type: item.type, id: item.type === 'root' ? null : item.id, name: item.name }));
+    const input = document.getElementById('user-share-emails');
+    const summary = document.getElementById('user-share-summary');
+    const submit = document.getElementById('user-share-submit');
+    if (input) input.value = '';
+    if (summary) summary.textContent = manageOnly ? 'Review, update permissions, or revoke your active shares.' : `${this.pendingUserShareResources.length} selected item(s). Only existing CloudDrive accounts can be added.`;
+    if (submit) submit.style.display = manageOnly ? 'none' : '';
+    document.getElementById('user-share-download').checked = false;
+    document.getElementById('user-share-delete').checked = false;
+    UI.showModal('user-share-modal');
+    await this.refreshUserShareList();
+  },
+
+  async refreshUserShareList() {
+    const container = document.getElementById('user-share-list');
+    if (!container) return;
+    try {
+      const result = await API.getMyUserShares();
+      const rows = result.shares || [];
+      if (!rows.length) { container.innerHTML = '<p>No active shares.</p>'; return; }
+      container.innerHTML = rows.map(share => `<div class="user-share-row" data-share-id="${UI.escapeAttr(share.id)}"><div class="user-share-row-title"><strong>${UI.escapeHtml(share.name)}</strong><span>${UI.escapeHtml(share.recipient_email)}</span></div><label><input type="checkbox" data-permission="download" ${share.can_download ? 'checked' : ''}> Download</label><label><input type="checkbox" data-permission="delete" ${share.can_delete ? 'checked' : ''}> Delete</label><button type="button" class="btn-danger-outline" data-revoke-share>Revoke</button></div>`).join('');
+    } catch (error) { container.innerHTML = `<p>Could not load shares: ${UI.escapeHtml(error.message)}</p>`; }
+  },
+
+  initUserShareModal() {
+    const modal = document.getElementById('user-share-modal');
+    document.getElementById('user-share-submit')?.addEventListener('click', async () => {
+      const emails = (document.getElementById('user-share-emails')?.value || '').split(/[\s,;]+/).map(value => value.trim()).filter(Boolean);
+      if (!emails.length || !this.pendingUserShareResources?.length) { UI.showToast('Choose at least one account and item', 'warning'); return; }
+      const button = document.getElementById('user-share-submit'); button.disabled = true;
+      try {
+        const result = await API.createUserShares(this.pendingUserShareResources, emails, document.getElementById('user-share-download').checked, document.getElementById('user-share-delete').checked);
+        UI.showToast(result.message || 'Items shared', 'success');
+        document.getElementById('user-share-emails').value = '';
+        await this.refreshUserShareList();
+      } catch (error) { UI.showToast(error.message || 'Sharing failed', 'error'); }
+      finally { button.disabled = false; }
+    });
+    modal?.addEventListener('change', async event => {
+      const row = event.target.closest('.user-share-row');
+      if (!row || !event.target.matches('input[data-permission]')) return;
+      try {
+        await API.updateUserShare(row.dataset.shareId, row.querySelector('[data-permission="download"]').checked, row.querySelector('[data-permission="delete"]').checked);
+        UI.showToast('Share permissions updated', 'success');
+      } catch (error) { UI.showToast(error.message, 'error'); await this.refreshUserShareList(); }
+    });
+    modal?.addEventListener('click', async event => {
+      const button = event.target.closest('[data-revoke-share]');
+      if (!button) return;
+      const row = button.closest('.user-share-row');
+      if (!row || !await UI.confirm({ title: 'Revoke this share?', message: 'The recipient will immediately lose access.', confirmText: 'Revoke share', confirmType: 'danger' })) return;
+      try { await API.revokeUserShare(row.dataset.shareId); row.remove(); UI.showToast('Share revoked', 'success'); }
+      catch (error) { UI.showToast(error.message, 'error'); }
+    });
+    document.getElementById('btn-share-entire-drive')?.addEventListener('click', () => this.openUserShareModal([{ type: 'root', name: 'Entire drive' }]));
+    document.getElementById('btn-manage-shares')?.addEventListener('click', () => this.openUserShareModal([], true));
+  },
+
   currentShareFile: null,
 
   async openShareModal(file) {
@@ -2806,12 +2901,8 @@ const App = {
 
     if (actionShare) {
       actionShare.onclick = () => {
-        const selectedFiles = Array.from(UI.selectedItems.values()).filter(i => i.type === 'file');
-        if (selectedFiles.length === 1) {
-          this.openShareModal(selectedFiles[0]);
-        } else if (selectedFiles.length > 1) {
-          UI.showToast('Select a single file to share', 'info');
-        }
+        const selected = Array.from(UI.selectedItems.values());
+        if (selected.length) this.openUserShareModal(selected.map(entry => ({ ...entry.item, type: entry.type })));
       };
     }
 
@@ -2901,7 +2992,17 @@ const App = {
 
         try {
           this.removeItemsLocally(selectedItems);
-          await API.batchTrash(fileIds, folderIds);
+          if (this.currentView === 'shared') {
+            for (const item of selectedItems) {
+              if (!item.item?.can_delete) throw new Error(`Delete permission is not enabled for ${item.item?.name || 'an item'}`);
+              if (item.type === 'file') await API.trashFile(item.id);
+              else await API.deleteFolder(item.id);
+            }
+            UI.clearSelection();
+            await this.loadSharedEntries();
+          } else {
+            await API.batchTrash(fileIds, folderIds);
+          }
           UI.showToast(`Moved ${count} item(s) to Trash`, 'success');
         } catch (e) {
           UI.showToast('Failed to trash items: ' + e.message, 'error');
@@ -5570,6 +5671,54 @@ const App = {
     await Promise.all([this.loadSettings(), this.loadAccountSessions()]);
   },
 
+  async loadSharedEntries() {
+    const reqId = ++this._navReqCounter;
+    UI.showSkeletons();
+    try {
+      const data = await API.getSharedWithMe();
+      if (reqId !== this._navReqCounter || this.currentView !== 'shared') return;
+      this.folders = [];
+      this.files = [];
+      for (const entry of data.entries || []) {
+        const item = { ...entry.item, _shareGrantId: entry.grant.id, _ownerEmail: entry.grant.owner_email, _ownerName: entry.grant.owner_name };
+        if (entry.grant.resource_type === 'file') this.files.push(item);
+        else this.folders.push(item);
+      }
+      this.breadcrumbs = [{ id: null, name: 'Shared with me' }];
+      this.currentFolderId = null;
+      this.renderContents();
+      UI.renderBreadcrumbs(this.breadcrumbs);
+      const shareActions = document.getElementById('shared-drive-actions');
+      if (shareActions) shareActions.style.display = 'none';
+    } catch (error) {
+      if (reqId === this._navReqCounter) UI.showToast(`Could not load shared items: ${error.message}`, 'error');
+    } finally {
+      if (reqId === this._navReqCounter) UI.hideSkeletons();
+    }
+  },
+
+  async loadSharedContents(shareId, folderId = null) {
+    if (!shareId) return this.loadSharedEntries();
+    const reqId = ++this._navReqCounter;
+    UI.showSkeletons();
+    try {
+      const data = await API.getSharedContents(shareId, folderId);
+      if (reqId !== this._navReqCounter || this.currentView !== 'shared') return;
+      this.folders = (data.folders || []).map(folder => ({ ...folder, _shareGrantId: shareId }));
+      this.files = (data.files || []).map(file => ({ ...file, _shareGrantId: shareId }));
+      this.breadcrumbs = data.breadcrumbs || [{ id: null, name: 'Shared with me' }];
+      this.currentFolderId = folderId;
+      this.renderContents();
+      UI.renderBreadcrumbs(this.breadcrumbs, data.currentFolder);
+      const shareActions = document.getElementById('shared-drive-actions');
+      if (shareActions) shareActions.style.display = 'none';
+    } catch (error) {
+      if (reqId === this._navReqCounter) UI.showToast(`Could not open shared folder: ${error.message}`, 'error');
+    } finally {
+      if (reqId === this._navReqCounter) UI.hideSkeletons();
+    }
+  },
+
   async loadAccountSessions() {
     const list = document.getElementById('account-device-sessions');
     const summary = document.getElementById('account-session-summary');
@@ -5621,6 +5770,32 @@ const App = {
       const data = await API.getSettings();
       if (!data) return;
 
+      // Provider credentials and the master key never travel in the standard
+      // settings payload. Only an authenticated admin can request this
+      // no-store response, and the values stay in password fields in memory.
+      try {
+        const secrets = await API.getAdminSecrets();
+        const masterKey = document.getElementById('settings-user-enc-key');
+        const discordToken = document.getElementById('settings-discord-bot-token');
+        const telegramHash = document.getElementById('settings-telegram-api-hash');
+        const telegramToken = document.getElementById('settings-telegram-bot-token');
+        if (masterKey) {
+          masterKey.value = secrets.userEncryptionKey || '';
+          masterKey.placeholder = secrets.userEncryptionKey ? '' : 'No encryption key found';
+        }
+        if (discordToken) discordToken.value = secrets.discord?.botToken || '';
+        if (telegramHash) telegramHash.value = secrets.telegram?.apiHash || '';
+        if (telegramToken) telegramToken.value = secrets.telegram?.botToken || '';
+      } catch (error) {
+        // Regular users are expected to receive 403 here; never surface or
+        // cache secret values outside an authenticated admin session.
+        if (error.status !== 403) {
+          const masterKey = document.getElementById('settings-user-enc-key');
+          if (masterKey && !masterKey.value) masterKey.placeholder = 'Unable to load key';
+          console.warn('Unable to load administrator-only secrets:', error.message || error);
+        }
+      }
+
       // Populate Discord config
       const discordData = data.discord || data.providers?.discord;
       if (discordData) {
@@ -5628,7 +5803,7 @@ const App = {
         const guildIdInput = document.getElementById('settings-discord-guild-id') || document.getElementById('settings-tg-api-hash');
         const channelIdInput = document.getElementById('settings-discord-channel-id') || document.getElementById('settings-tg-channel-id');
 
-        if (botTokenInput) botTokenInput.value = discordData.botToken || '';
+        if (botTokenInput && discordData.botToken) botTokenInput.value = discordData.botToken;
         if (guildIdInput) guildIdInput.value = discordData.guildId || '';
         if (channelIdInput) channelIdInput.value = discordData.channelId || '';
 
@@ -5664,8 +5839,8 @@ const App = {
         const tgChannelId = document.getElementById('settings-telegram-channel-id');
 
         if (tgApiId) tgApiId.value = tgData.apiId || '';
-        if (tgApiHash) tgApiHash.value = tgData.apiHash || '';
-        if (tgBotToken) tgBotToken.value = tgData.botToken || '';
+        if (tgApiHash && tgData.apiHash) tgApiHash.value = tgData.apiHash;
+        if (tgBotToken && tgData.botToken) tgBotToken.value = tgData.botToken;
         if (tgChannelId) tgChannelId.value = tgData.channelId || '';
 
         const tgBannerDot = document.getElementById('telegram-status-dot');
@@ -6273,8 +6448,8 @@ const App = {
             const remoteId = b.remote_id || b.discord_message_id || '-';
 
             return `
-              <div class="cache-action-box" style="padding: 10px 14px; background: var(--bg-hover); display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
-                <div style="flex: 1; min-width: 220px;">
+              <div class="cache-action-box backup-item" style="padding: 10px 14px; background: var(--bg-hover);">
+                <div class="backup-item-details">
                   <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                     <strong style="font-size: 13px;">${b.file_name}</strong>
                     <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; color: ${provColor}; background: ${provBg};">
@@ -6285,7 +6460,7 @@ const App = {
                     ${timeStr} · ${sizeStr} · Msg #${remoteId}
                   </p>
                 </div>
-                <div style="display: flex; align-items: center; gap: 6px;">
+                <div class="backup-item-right">
                   <button type="button" class="btn-secondary btn-restore-cloud-backup" data-id="${b.id}" data-remote-id="${remoteId}" data-provider="${b.provider || 'discord'}" style="padding: 6px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
                     <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
                     <span>Restore</span>
@@ -6920,12 +7095,21 @@ function initAdminRecoveryActions() {
     const download = event.target.closest('#btn-download-recovery-bundle');
     if (download) {
       event.preventDefault();
-    const password = window.prompt('Enter your admin password to download the recovery bundle:');
-    if (!password) return;
-    const response = await fetch('/api/settings/download-recovery-bundle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
-    if (!response.ok) return window.alert((await response.json().catch(() => ({}))).error || 'Download failed');
-    const blob = await response.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a');
-    a.href = url; a.download = 'clouddrive-recovery-bundle.json'; a.click(); URL.revokeObjectURL(url);
+      const password = await openRecoveryBundleModal();
+      if (!password) return;
+      try {
+        const response = await fetch('/api/settings/download-recovery-bundle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          UI.showToast(data.error || 'Download failed', 'error');
+          return;
+        }
+        const blob = await response.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a');
+        a.href = url; a.download = 'clouddrive-recovery-bundle.json'; a.click(); URL.revokeObjectURL(url);
+        UI.showToast('Recovery bundle download started', 'success');
+      } catch (error) {
+        UI.showToast(`Recovery bundle request failed: ${error.message}`, 'error');
+      }
       return;
     }
     const purge = event.target.closest('#btn-purge-telegram-known');
@@ -6946,6 +7130,29 @@ function initAdminRecoveryActions() {
       purge.disabled = false;
       purge.textContent = originalLabel;
     }
+  });
+}
+
+function openRecoveryBundleModal() {
+  return new Promise(resolve => {
+    const password = document.getElementById('recovery-bundle-password');
+    const confirm = document.getElementById('recovery-bundle-confirm');
+    const cancel = document.getElementById('recovery-bundle-cancel');
+    if (!password || !confirm || !cancel || typeof UI === 'undefined') return resolve(null);
+
+    password.value = '';
+    const refresh = () => { confirm.disabled = !password.value; };
+    const close = result => {
+      password.removeEventListener('input', refresh);
+      UI.hideModal('recovery-bundle-modal');
+      resolve(result);
+    };
+    password.addEventListener('input', refresh);
+    cancel.onclick = () => close(null);
+    confirm.onclick = () => close(password.value);
+    UI.showModal('recovery-bundle-modal');
+    refresh();
+    password.focus();
   });
 }
 

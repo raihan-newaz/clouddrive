@@ -178,6 +178,10 @@ const API = {
     return this.request('GET', '/api/auth/me');
   },
 
+  async getAdminSecrets() {
+    return this.request('GET', '/api/settings/admin-secrets');
+  },
+
   async getMe() {
     return this.request('GET', '/api/auth/me');
   },
@@ -665,6 +669,20 @@ const API = {
   async revokeShare(fileId) {
     return this.request('DELETE', `/api/share/file/${fileId}`);
   },
+
+  async getSharedWithMe() { return this.request('GET', '/api/user-shares/with-me'); },
+  async getSharedContents(shareId, folderId = null) {
+    const query = folderId ? `?folderId=${encodeURIComponent(folderId)}` : '';
+    return this.request('GET', `/api/user-shares/${encodeURIComponent(shareId)}/contents${query}`);
+  },
+  async getMyUserShares() { return this.request('GET', '/api/user-shares/mine'); },
+  async createUserShares(resources, emails, canDownload, canDelete) {
+    return this.request('POST', '/api/user-shares', { resources, emails, canDownload, canDelete });
+  },
+  async updateUserShare(id, canDownload, canDelete) {
+    return this.request('PATCH', `/api/user-shares/${encodeURIComponent(id)}`, { canDownload, canDelete });
+  },
+  async revokeUserShare(id) { return this.request('DELETE', `/api/user-shares/${encodeURIComponent(id)}`); },
 
   getExportDbUrl() {
     return '/api/settings/export-db';

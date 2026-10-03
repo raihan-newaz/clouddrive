@@ -235,6 +235,20 @@ async function initialize() {
   `);
   db.run(`CREATE TABLE IF NOT EXISTS blocked_ips (ip_address TEXT PRIMARY KEY, reason TEXT, blocked_by TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
 
+  db.run(`CREATE TABLE IF NOT EXISTS user_shares (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    resource_type TEXT NOT NULL CHECK(resource_type IN ('file', 'folder', 'root')),
+    resource_id TEXT,
+    can_download INTEGER NOT NULL DEFAULT 0,
+    can_delete INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    revoked_at DATETIME
+  );`);
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_user_shares_recipient ON user_shares(recipient_id, revoked_at);'); } catch (e) {}
+  try { db.run('CREATE INDEX IF NOT EXISTS idx_user_shares_owner ON user_shares(owner_id, revoked_at);'); } catch (e) {}
+
   // Indexes for high-speed queries
   try { db.run('CREATE INDEX IF NOT EXISTS idx_files_user_trashed ON files(user_id, is_trashed);'); } catch (e) {}
   try { db.run('CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_id);'); } catch (e) {}
@@ -1544,6 +1558,16 @@ function getBlockedIps() { return all('SELECT * FROM blocked_ips ORDER BY create
 function blockIp(ip, reason = '', blockedBy = null) { run('INSERT OR REPLACE INTO blocked_ips (ip_address, reason, blocked_by) VALUES (?, ?, ?)', [normalizeIp(ip), reason, blockedBy]); }
 function unblockIp(ip) { run('DELETE FROM blocked_ips WHERE ip_address = ?', [normalizeIp(ip)]); }
 
+function getUserShare(id) { return get('SELECT * FROM user_shares WHERE id = ?', [id]); }
+function getActiveUserSharesForRecipient(recipientId) { return all("SELECT s.*, u.email AS owner_email, u.name AS owner_name FROM user_shares s JOIN users u ON u.id = s.owner_id WHERE s.recipient_id = ? AND s.revoked_at IS NULL AND u.status = 'active' ORDER BY s.created_at DESC", [recipientId]); }
+function getActiveUserSharesForOwner(ownerId) { return all("SELECT s.*, u.email AS recipient_email, u.name AS recipient_name FROM user_shares s JOIN users u ON u.id = s.recipient_id WHERE s.owner_id = ? AND s.revoked_at IS NULL ORDER BY s.created_at DESC", [ownerId]); }
+function createUserShare(share) {
+  run('INSERT INTO user_shares (id, owner_id, recipient_id, resource_type, resource_id, can_download, can_delete) VALUES (?, ?, ?, ?, ?, ?, ?)', [share.id, share.owner_id, share.recipient_id, share.resource_type, share.resource_id || null, share.can_download ? 1 : 0, share.can_delete ? 1 : 0]);
+  return getUserShare(share.id);
+}
+function revokeUserShare(id, ownerId) { run('UPDATE user_shares SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ? AND revoked_at IS NULL', [id, ownerId]); }
+function updateUserSharePermissions(id, ownerId, canDownload, canDelete) { run('UPDATE user_shares SET can_download = ?, can_delete = ? WHERE id = ? AND owner_id = ? AND revoked_at IS NULL', [canDownload ? 1 : 0, canDelete ? 1 : 0, id, ownerId]); }
+
 module.exports = {
   initialize,
   save,
@@ -1600,6 +1624,12 @@ module.exports = {
   incrementShareViews,
   updateFileShare,
   revokeFileShare,
+  getUserShare,
+  getActiveUserSharesForRecipient,
+  getActiveUserSharesForOwner,
+  createUserShare,
+  revokeUserShare,
+  updateUserSharePermissions,
   
   // Chunks & Replicas
   addFileChunk,

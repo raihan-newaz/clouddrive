@@ -1,4 +1,4 @@
-const CACHE_NAME = 'clouddrive-v56';
+const CACHE_NAME = 'clouddrive-v57';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

@@ -28,7 +28,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/themes.css?v=20260921_29">
-  <link rel="stylesheet" href="/css/styles.css?v=20260923_68">
+  <link rel="stylesheet" href="/css/styles.css?v=20260923_69">
   <link rel="stylesheet" href="/css/responsive.css?v=20260921_28">
   <script>
     (function() {
@@ -379,6 +379,10 @@
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
             <span>My Drive</span>
           </a>
+          <a class="nav-item" data-view="shared" href="#">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zM8 11c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V20h14v-3.5C15 14.17 10.33 13 8 13zm8.01 0c-.29 0-.62.02-.97.05 1.16.84 1.96 1.98 1.96 3.45V20h6v-3.5c0-2.33-4.66-3.5-6.99-3.5z"/></svg>
+            <span>Shared with me</span>
+          </a>
           <a class="nav-item" data-view="starred" href="#">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
             <span>Starred</span>
@@ -508,6 +512,10 @@
         <div class="breadcrumb" id="breadcrumb">
           <a class="breadcrumb-item" data-folder-id="" href="#">My Drive</a>
         </div>
+        <div class="shared-drive-actions" id="shared-drive-actions" style="display:none;">
+          <button class="btn-secondary" id="btn-share-entire-drive" type="button">Share entire drive</button>
+          <button class="btn-secondary" id="btn-manage-shares" type="button">Manage shares</button>
+        </div>
 
         <!-- TRASH INFO BANNER -->
         <div class="trash-banner" id="trash-banner" style="display:none;">
@@ -532,7 +540,7 @@
               <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
               <span>Download</span>
             </button>
-            <button class="action-btn" id="action-share" title="Share file">
+            <button class="action-btn" id="action-share" title="Share with CloudDrive users">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92c0-1.61-1.31-2.92-2.92-2.92z"/></svg>
               <span>Share</span>
             </button>
@@ -1091,6 +1099,18 @@
     </div>
   </div>
 
+  <div class="modal user-share-modal" id="user-share-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="user-share-title">
+    <div class="user-share-modal-inner">
+      <div class="user-share-head"><div><h3 id="user-share-title">Share with CloudDrive users</h3><p id="user-share-summary">Choose existing accounts and their access.</p></div><button class="icon-btn" data-modal-cancel aria-label="Close">×</button></div>
+      <label for="user-share-emails">Recipient email addresses</label>
+      <textarea id="user-share-emails" rows="3" maxlength="2000" placeholder="name@example.com, another@example.com" autocomplete="off"></textarea>
+      <div class="user-share-permissions"><label><input type="checkbox" id="user-share-download"> Allow download</label><label><input type="checkbox" id="user-share-delete"> Allow move to owner’s Trash</label></div>
+      <button class="btn-primary" id="user-share-submit" type="button">Share selected items</button>
+      <section class="user-share-manage"><h4>Active shares by you</h4><div id="user-share-list"><p>Loading shares…</p></div></section>
+      <div class="modal-actions"><button class="btn-secondary" data-modal-cancel type="button">Done</button></div>
+    </div>
+  </div>
+
   <!-- DELETE CONFIRMATION MODAL -->
   <div class="modal" id="delete-modal" style="display:none;">
     <h3 id="delete-modal-title">Delete item?</h3>
@@ -1143,6 +1163,28 @@
       <div class="modal-actions confirm-actions">
         <button type="button" class="btn-secondary" id="telegram-purge-cancel">Cancel</button>
         <button type="button" class="btn-danger" id="telegram-purge-confirm" disabled>Delete uploads</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal custom-confirm-modal" id="recovery-bundle-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="recovery-bundle-title">
+    <div class="confirm-modal-content">
+      <div class="confirm-icon-wrapper">
+        <div class="confirm-icon">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+        </div>
+      </div>
+      <div class="confirm-text-wrap">
+        <h3 id="recovery-bundle-title">Download recovery bundle</h3>
+        <p>This export includes encrypted database metadata, provider configuration, and encryption keys. Store it offline in an encrypted location.</p>
+        <div class="confirm-subtext" style="display:block;">Confirm your admin password to create a one-time download. Nothing is stored in the browser.</div>
+        <div style="display:grid; gap:10px; margin-top:16px;">
+          <input id="recovery-bundle-password" type="password" placeholder="Admin password" autocomplete="off" autocapitalize="none" spellcheck="false">
+        </div>
+      </div>
+      <div class="modal-actions confirm-actions">
+        <button type="button" class="btn-secondary" id="recovery-bundle-cancel">Cancel</button>
+        <button type="button" class="btn-primary" id="recovery-bundle-confirm" disabled>Download bundle</button>
       </div>
     </div>
   </div>
@@ -2684,13 +2726,13 @@
   <input type="file" id="folder-input" webkitdirectory directory multiple style="display:none;">
 
   <!-- Core Scripts in order -->
-  <script src="/js/api.js?v=20260923_65"></script>
-  <script src="/js/ui.js?v=20260923_63"></script>
+  <script src="/js/api.js?v=20261003_01"></script>
+  <script src="/js/ui.js?v=20261003_01"></script>
   <script src="/js/upload.js?v=20260921_60"></script>
-  <script src="/js/preview.js?v=20260921_63"></script>
+  <script src="/js/preview.js?v=20261003_01"></script>
   <script src="/js/setup.js?v=20260921_74"></script>
   <script src="/js/pwa.js?v=20260920_59"></script>
-    <script src="/js/app.js?v=20260923_84"></script>
+    <script src="/js/app.js?v=20261003_01"></script>
 </body>
 </html>
 

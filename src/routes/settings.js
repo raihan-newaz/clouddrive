@@ -81,6 +81,23 @@ router.get('/', async (req, res) => {
   });
 });
 
+// Secrets are intentionally omitted from the normal settings response. This
+// separate no-store endpoint is restricted to the authenticated administrator
+// and is used only to populate the administrator's local settings form.
+router.get('/admin-secrets', adminOnly, (req, res) => {
+  const admin = db.getUserById(req.user.id);
+  res.set('Cache-Control', 'no-store, private');
+  res.json({
+    success: true,
+    userEncryptionKey: admin?.encryption_key || '',
+    discord: { botToken: process.env.DISCORD_BOT_TOKEN || '' },
+    telegram: {
+      apiHash: process.env.TELEGRAM_API_HASH || '',
+      botToken: process.env.TELEGRAM_BOT_TOKEN || ''
+    }
+  });
+});
+
 // Live Cloud Storage Statistics
 router.get('/storage-stats', (req, res) => {
   try {

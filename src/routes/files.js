@@ -15,6 +15,7 @@ const eventBroadcaster = require('../services/eventBroadcaster');
 const { UploadQueue, UploadQueueFullError } = require('../services/uploadQueue');
 const config = require('../config');
 const { verifyFolderToken } = require('../securityTokens');
+const userSharing = require('../services/userSharing');
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -803,8 +804,11 @@ router.post('/upload', uploadLimiter, upload.single('file'), async (req, res) =>
 
 router.get('/:id/download', async (req, res) => {
   const { id } = req.params;
-  const file = db.getFileById(id, req.user.id);
+  const file = db.getFileById(id);
   if (!file) return res.status(404).json({ error: 'File not found' });
+  const sharePermission = userSharing.getFilePermission(req.user.id, file, 'download');
+  if (!sharePermission) return res.status(403).json({ error: 'Download permission is not available for this shared file' });
+  if (!sharePermission.isOwner) res.set('Cache-Control', 'private, no-store');
   if (!requireUnlockedFile(req, res, file)) return;
   db.logAuditEvent({ userId: req.user.id, userEmail: req.user.email, action: 'FILE_DOWNLOAD', details: { fileId: file.id, fileName: file.name }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
 
@@ -869,8 +873,11 @@ router.get('/:id/download', async (req, res) => {
 // Streaming (Range Request Support for Media Player)
 router.get('/:id/stream', async (req, res) => {
   const { id } = req.params;
-  const file = db.getFileById(id, req.user.id);
+  const file = db.getFileById(id);
   if (!file) return res.status(404).send('File not found');
+  const sharePermission = userSharing.getFilePermission(req.user.id, file, 'read');
+  if (!sharePermission) return res.status(403).send('Shared file access is not available');
+  if (!sharePermission.isOwner) res.set('Cache-Control', 'private, no-store');
   if (!requireUnlockedFile(req, res, file)) return;
   db.logAuditEvent({ userId: req.user.id, userEmail: req.user.email, action: 'FILE_VIEW', details: { fileId: file.id, fileName: file.name, access: 'stream' }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
 
@@ -1036,8 +1043,11 @@ router.get('/:id/stream', async (req, res) => {
 // GET Thumbnail (supports browser caching, on-demand image decryption)
 router.get('/:id/thumbnail', async (req, res) => {
   const { id } = req.params;
-  const file = db.getFileById(id, req.user.id);
+  const file = db.getFileById(id);
   if (!file) return res.status(404).send('File not found');
+  const sharePermission = userSharing.getFilePermission(req.user.id, file, 'read');
+  if (!sharePermission) return res.status(403).send('Shared file access is not available');
+  if (!sharePermission.isOwner) res.set('Cache-Control', 'private, no-store');
   if (!requireUnlockedFile(req, res, file)) return;
   db.logAuditEvent({ userId: req.user.id, userEmail: req.user.email, action: 'FILE_VIEW', details: { fileId: file.id, fileName: file.name, access: 'thumbnail' }, ipAddress: req.ip, userAgent: req.get('User-Agent') });
 
@@ -1356,8 +1366,11 @@ async function permanentlyDeleteFile(file, options = {}) {
 
 // Soft Delete (move to Trash)
 router.delete('/:id', (req, res) => {
-  const file = db.getFileById(req.params.id, req.user.id);
+  const file = db.getFileById(req.params.id);
   if (!file) return res.status(404).json({ error: 'File not found' });
+  const permission = userSharing.getFilePermission(req.user.id, file, 'delete');
+  if (!permission) return res.status(403).json({ error: 'Delete permission is not available for this shared file' });
+  if (!permission.isOwner && req.query.permanent === 'true') return res.status(403).json({ error: 'Shared files can only be moved to the owner’s Trash' });
 
   // Cancel any ongoing replication tasks for this file
   replicationWorker.cancelFileReplication(file.id);
@@ -1372,8 +1385,8 @@ router.delete('/:id', (req, res) => {
     return;
   }
 
-  db.updateFile(file.id, { is_trashed: 1, trashed_at: new Date().toISOString() }, req.user.id);
-  db.recalculateUserStorage(req.user.id);
+  db.updateFile(file.id, { is_trashed: 1, trashed_at: new Date().toISOString() }, file.user_id);
+  db.recalculateUserStorage(file.user_id);
   res.json({ success: true, message: 'File moved to trash' });
 });
 

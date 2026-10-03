@@ -106,7 +106,7 @@ const UI = {
     if (overlay && modal) {
       overlay.style.display = 'block';
       overlay.classList.add('visible');
-      modal.style.display = (modal.classList.contains('settings-modal') || modal.classList.contains('share-modal')) ? 'flex' : 'block';
+      modal.style.display = (modal.classList.contains('settings-modal') || modal.classList.contains('share-modal') || modal.classList.contains('user-share-modal')) ? 'flex' : 'block';
       modal.classList.add('visible');
       modal.removeAttribute('inert');
       modal.removeAttribute('aria-hidden');
@@ -361,6 +361,7 @@ const UI = {
     }
 
     const isTrashView = typeof App !== 'undefined' && App.currentView === 'trash';
+    const isSharedView = typeof App !== 'undefined' && App.currentView === 'shared';
     const restoreBtn = document.getElementById('action-restore');
     const permDeleteBtn = document.getElementById('action-permanent-delete');
     const downloadBtn = document.getElementById('action-download');
@@ -368,7 +369,17 @@ const UI = {
     const starBtn = document.getElementById('action-star');
     const deleteBtn = document.getElementById('action-delete');
 
-    if (isTrashView) {
+    if (isSharedView) {
+      const selected = Array.from(this.selectedItems.values());
+      if (restoreBtn) restoreBtn.style.display = 'none';
+      if (permDeleteBtn) permDeleteBtn.style.display = 'none';
+      if (deleteBtn) deleteBtn.style.display = selected.every(item => item.item?.can_delete) ? 'inline-flex' : 'none';
+      if (downloadBtn) downloadBtn.style.display = selected.some(item => item.type === 'file') && selected.filter(item => item.type === 'file').every(item => item.item?.can_download) ? 'inline-flex' : 'none';
+      if (moveBtn) moveBtn.style.display = 'none';
+      if (starBtn) starBtn.style.display = 'none';
+      const shareBtn = document.getElementById('action-share');
+      if (shareBtn) shareBtn.style.display = 'none';
+    } else if (isTrashView) {
       if (restoreBtn) restoreBtn.style.display = 'inline-flex';
       if (permDeleteBtn) permDeleteBtn.style.display = 'inline-flex';
       if (deleteBtn) deleteBtn.style.display = 'none';
@@ -387,8 +398,8 @@ const UI = {
 
       const shareBtn = document.getElementById('action-share');
       if (shareBtn) {
-        const selectedFiles = Array.from(this.selectedItems.values()).filter(i => i.type === 'file');
-        shareBtn.style.display = (!isTrashView && selectedFiles.length === 1) ? 'inline-flex' : 'none';
+        const selected = Array.from(this.selectedItems.values());
+        shareBtn.style.display = (!isTrashView && !isSharedView && selected.length > 0 && selected.every(item => !item.item?.shared)) ? 'inline-flex' : 'none';
       }
     }
   },
@@ -623,7 +634,8 @@ const UI = {
       link.onclick = (e) => {
         e.preventDefault();
         const fid = link.getAttribute('data-folder-id') || null;
-        App.navigateToFolder(fid);
+        if (App.currentView === 'shared' && !fid) App.navigateToView('shared');
+        else App.navigateToFolder(fid);
       };
     });
 

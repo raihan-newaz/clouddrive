@@ -5038,6 +5038,28 @@ body.dragging .drop-zone-content {
   flex-shrink: 0;
 }
 .cache-action-buttons { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
+
+/* Cloud backup history: keep the metadata and actions aligned without allowing
+   either side to overflow narrow settings panels. */
+.backup-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.backup-item-details {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.backup-item-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
 @media (max-width: 680px) { .cache-action-buttons { width:100%; }.cache-action-buttons button { flex:1 1 170px; } }
 .account-sessions-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:16px 0 9px; }
 .account-sessions-head strong,.account-sessions-head small { display:block; }.account-sessions-head strong { font-size:13px; }.account-sessions-head small { margin-top:3px; color:var(--text-secondary); font-size:12px; }
@@ -6136,4 +6158,39 @@ body.is-pwa-standalone .pwa-install-btn {
 .btn-resume-upload .flat-icon {
   display: block;
   pointer-events: none;
+}
+.shared-drive-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.user-share-modal {
+  width: min(680px, calc(100vw - 28px));
+  max-height: min(88vh, 820px);
+  overflow: auto;
+  padding: 22px;
+  border-radius: 16px;
+}
+.user-share-modal-inner { display: grid; gap: 14px; }
+.user-share-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.user-share-head h3 { margin: 0 0 5px; }
+.user-share-head p, .user-share-manage p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.user-share-modal > .user-share-modal-inner > label { font-size: 13px; font-weight: 600; }
+.user-share-modal textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+.user-share-permissions { display: flex; flex-wrap: wrap; gap: 18px; }
+.user-share-permissions label, .user-share-row label { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; }
+.user-share-manage { border-top: 1px solid var(--border-color); padding-top: 14px; }
+.user-share-manage h4 { margin: 0 0 10px; }
+.user-share-row { display: grid; grid-template-columns: minmax(130px, 1fr) auto auto auto; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border-color); }
+.user-share-row-title { min-width: 0; display: grid; gap: 3px; }
+.user-share-row-title strong, .user-share-row-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-share-row-title span { color: var(--text-secondary); font-size: 12px; }
+@media (max-width: 640px) {
+  .shared-drive-actions { justify-content: stretch; }
+  .shared-drive-actions > button { flex: 1; min-width: 0; padding-inline: 8px; }
+  .user-share-modal { padding: 16px; }
+  .user-share-row { grid-template-columns: 1fr 1fr; gap: 9px; }
+  .user-share-row-title { grid-column: 1 / -1; }
+  .user-share-row [data-revoke-share] { justify-self: end; }
 }
